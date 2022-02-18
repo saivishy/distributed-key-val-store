@@ -1,35 +1,35 @@
 {% extends 'base.html' %}
 
 {% block head %} 
-<title>Favorites</title>
+<title>FavShare</title>
 {% endblock %}
 
 {% block body %} 
 <div class="content">
-    <h1 style="text-align: center">Favorites</h1>
+    <h1 style="text-align: center">FavShare</h1>
     <table>
         <tr>
-            <th>User</th>
-            <th>Added</th>
-            <th>Actions</th>
+            <th>Date Added</th>
+            <th>Name</th>
+            <th>Hash</th>
         </tr>
-        {% for task in tasks %}
+        {% for record in records %}
             <tr>
-                <td>{{ task.content }}</td>
-                <td>{{ task.date_created.date() }}</td>
-                <td>{{ task.age }}</td>
+                <td>{{ record.date_created.date() }}</td>
+                <td>{{ record.name }}</td>
+                <td>{{ record.hash }}</td>
                 <td>
-                    <a href="/delete/{{ task.id }}">Delete</a>
+                    <a href="/delete/{{ record.id }}">Delete</a>
                     <br>
-                    <a href="/update/{{ task.id }}">Update</a>
+                    <a href="/update/{{ record.id }}">Update</a>
                 </td>
             </tr>
         {% endfor %}
     </table>
     <form action="/" method="POST">
-        <input type="text" name="content" id="content">
-        <input type="text" name="age" id="age">
-        <input type="submit" value="Add Task">
+        <input type="text" name="name" id="name">
+        <input type="text" name="hash" id="hash">
+        <input type="submit" value="Add record">
     </form>
 </div>
 
