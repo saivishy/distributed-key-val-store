@@ -1,72 +1,74 @@
 from flask import Flask, render_template, url_for, request, redirect
 from flask_sqlalchemy import SQLAlchemy
-# from flask_restful import Resource, Api
 from datetime import datetime
 
 app =  Flask(__name__)
-# api = Api(app)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
-# app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://{}:{}@{}/{}'.format(
-#     os.getenv('DB_USER', 'flask'),
-#     os.getenv('DB_PASSWORD', ''),
-#     os.getenv('DB_HOST', 'mysql'),
-#     os.getenv('DB_NAME', 'flask')
-# )
 
 db = SQLAlchemy(app)
 
-class Todo(db.Model):
+class Person(db.Model):
     id = db.Column(db.Integer, primary_key= True)
-    content = db.Column(db.String(200), nullable = False)
-    age = db.Column(db.Integer, nullable = False)
-    completed = db.Column(db.Integer, default=0)
+    name = db.Column(db.String(200), nullable = False)
+    hash = db.Column(db.Integer, nullable = False)
     date_created = db.Column(db.DateTime, default=datetime.utcnow)
     
-    def __ref__(self):
-        return '<Task %r' % self.id
+    def __repr__(self):
+        return '<Record %r' % self.id
 
 ## index route
 @app.route('/', methods=['POST', 'GET'])
 def index():
     if request.method == 'POST':
-        task_content = request.form['content']
-        task_age = request.form['age']
-        new_task = Todo(content=task_content,age=task_age) 
+        record_name = request.form['name']
+        record_hash = request.form['hash']
+        new_record = Person(name=record_name,hash=record_hash) 
         try:
-            db.session.add(new_task)            
+            db.session.add(new_record)            
             db.session.commit()
             return redirect('/')
         except:
-            return 'There was an issue adding the task'
+            return 'There was an issue adding the record'
     else:
-        tasks = Todo.query.order_by(Todo.date_created).all()
-        return render_template('index.html', tasks = tasks)
+        records = Person.query.order_by(Person.date_created).all()
+        return render_template('index.html', records = records)
 
 @app.route('/delete/<int:id>')
 def delete(id):
-    task_to_delete = Todo.query.get_or_404(id)
+    record_to_delete = Person.query.get_or_404(id)
 
     try:
-        db.session.delete(task_to_delete)
+        db.session.delete(record_to_delete)
         db.session.commit()
         return redirect('/')
     except:
-        return 'There was an issue deleting that task'
+        return 'There was an issue deleting that record'
 
 @app.route('/update/<int:id>', methods= ['GET','POST'])
 def update(id):
-    task = Todo.query.get_or_404(id)
+    record = Person.query.get_or_404(id)
     if request.method == 'POST':
-        task.content = request.form['content']
+        record.name = request.form['name']
         
         try:
             db.session.commit()
             return redirect('/')
         except:
-            return 'There was an issue updating the task'
+            return 'There was an issue updating the record'
     else:
-        return render_template('update.html', task = task )
+        return render_template('update.html', record = record )
+
+# @app.route('/view/<int:id>')
+# def view(id):
+#     record_to_delete = Person.query.get_or_404(id)
+
+#     try:
+#         db.session.query(record_to_delete)
+#         db.session.commit()
+#         return redirect('/')
+#     except:
+#         return 'There was an issue deleting that record'
 
 if __name__ == "__main__":
     app.run(debug=True, host ='0.0.0.0', port=5000)
