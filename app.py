@@ -1,12 +1,16 @@
 from flask import Flask, render_template, url_for, request, redirect
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+import os
+import requests
 
 app =  Flask(__name__)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.environ.get('DATABASE_FILENAME')}"
 
 db = SQLAlchemy(app)
+
+
 
 class Person(db.Model):
     id = db.Column(db.Integer, primary_key= True)
@@ -17,10 +21,17 @@ class Person(db.Model):
     def __repr__(self):
         return '<Record %r' % self.id
 
+db.create_all()
+
 ## index route
 @app.route('/', methods=['POST', 'GET'])
 def index():
     if request.method == 'POST':
+        if os.environ.get('LEADER') == True:
+            requests.post('http://follower_1/5100', data={'name': 'name', 'hash': 'hash'})
+            requests.post('http://follower_2/5101', data={'name': 'name', 'hash': 'hash'})
+        else:
+            print('NOT LEADER-------------------')
         record_name = request.form['name']
         record_hash = request.form['hash']
         new_record = Person(name=record_name,hash=record_hash) 
