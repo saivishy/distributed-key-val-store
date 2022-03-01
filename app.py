@@ -27,13 +27,18 @@ db.create_all()
 @app.route('/', methods=['POST', 'GET'])
 def index():
     if request.method == 'POST':
-        if os.environ.get('LEADER') == True:
-            requests.post('http://follower_1/5100', data={'name': 'name', 'hash': 'hash'})
-            requests.post('http://follower_2/5101', data={'name': 'name', 'hash': 'hash'})
-        else:
-            print('NOT LEADER-------------------')
         record_name = request.form['name']
         record_hash = request.form['hash']
+        lead = os.environ.get('LEADER')
+        if  lead == '1':
+            files= {"name": (None,record_name) , "hash": (None,record_hash)}
+            url1 = 'http://follower_1:5000/'
+            log1 = requests.post(url1,  files =files)
+            url2 = 'http://follower_2:5000/'
+            log2 = requests.post(url2, files =files)
+        else:
+            print('NOT LEADER-------------------')
+            print(os.environ.get('LEADER'))
         new_record = Person(name=record_name,hash=record_hash) 
         try:
             db.session.add(new_record)            
