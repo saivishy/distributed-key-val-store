@@ -15,6 +15,8 @@
 * Hence, when building the docker, use the OS specific commands given below:
     * Windows -  ```docker-compose -f docker-compose.dev.yml up --build```
     * Linux - ```docker-compose -f docker-compose-linux.yml ip --build``` 
+* When running multiple containers use the following docker compose:
+    * Windows -  ```docker-compose -f docker-compose.multi.yml up --build``` 
 
 ## **Application Video**
 * [Box Link](https://buffalo.box.com/s/p5x0sm07q9uy6b3xo7mvijivsdwiovtf)
