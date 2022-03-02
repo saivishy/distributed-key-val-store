@@ -54,6 +54,17 @@ def index():
 def delete(id):
     record_to_delete = Person.query.get_or_404(id)
 
+    lead = os.environ.get('LEADER')
+    if  lead == '1': 
+        for node in range(1,3):
+            url = f"http://follower_{node}:5000/delete/{id}"
+            log = requests.get(url)
+            print(f"SENT to delete GET to follower_{node}")
+            print(log)
+    else:
+        print('NOT LEADER-------------------')
+        print(os.environ.get('LEADER'))
+
     try:
         db.session.delete(record_to_delete)
         db.session.commit()
@@ -64,16 +75,48 @@ def delete(id):
 @app.route('/update/<int:id>', methods= ['GET','POST'])
 def update(id):
     record = Person.query.get_or_404(id)
-    if request.method == 'POST':
-        record.name = request.form['name']
-        
-        try:
-            db.session.commit()
-            return redirect('/')
-        except:
-            return 'There was an issue updating the record'
+
+    lead = os.environ.get('LEADER')
+    if  lead == '1': 
+        if request.method == 'POST':
+            record.name = request.form['name']
+            record_name = request.form['name']
+            for node in range(1,3):
+                url = f"http://follower_{node}:5000//update/{id}"
+                get_log = requests.get(url)
+                print(f"SENT to update GET to follower_{node}")
+                print(get_log)
+                
+                files= {"name": (None,record_name)}
+                post_log = requests.post(url,  files =files)
+                print(f"SENT to update POST to follower_{node}")
+                print(post_log)
+            
+            try:
+                db.session.commit()
+                return redirect('/')
+            except:
+                return 'There was an issue updating the record'
+        else:
+            return render_template('update.html', record = record )
+            
+            
     else:
-        return render_template('update.html', record = record )
+        print('NOT LEADER-------------------')
+        print(os.environ.get('LEADER'))
+    
+    
+    
+        if request.method == 'POST':
+            record.name = request.form['name']
+            
+            try:
+                db.session.commit()
+                return redirect('/')
+            except:
+                return 'There was an issue updating the record'
+        else:
+            return render_template('update.html', record = record )
 
 # @app.route('/view/<int:id>')
 # def view(id):

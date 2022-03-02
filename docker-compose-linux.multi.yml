@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+ web1:
+  build:
+   context: .
+  ports:
+  - 8000:5000
+  volumes:
+  - ./:/app
+  networks:
+  - dist-trial
+  environment:
+  - DATABASE_FILENAME="test1.db"
+  - LEADER=1
+  - PYTHONUNBUFFERED=1
+  container_name: leader
+
+ web2:
+  build:
+   context: .
+  ports:
+  - 5100:5000
+  volumes:
+  - ./:/app
+  networks:
+  - dist-trial
+  environment:
+  - DATABASE_FILENAME="test2.db"
+  - LEADER=0
+  - PYTHONUNBUFFERED=1
+  container_name: follower_1
+
+ web3:
+  build:
+   context: .
+  ports:
+  - 5101:5000
+  volumes:
+  - ./:/app
+  networks:
+  - dist-trial
+  environment:
+  - DATABASE_FILENAME="test3.db"
+  - LEADER=0
+  - PYTHONUNBUFFERED=1
+  container_name: follower_2
+  
+networks:
+  dist-trial:
