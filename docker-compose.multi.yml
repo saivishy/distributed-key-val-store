@@ -12,7 +12,8 @@ services:
   - dist-trial
   environment:
   - DATABASE_FILENAME="test1.db"
-  - LEADER=True
+  - LEADER=1
+  - PYTHONUNBUFFERED=1
   container_name: leader
 
  web2:
@@ -26,7 +27,8 @@ services:
   - dist-trial
   environment:
   - DATABASE_FILENAME="test2.db"
-  - LEADER=False
+  - LEADER=0
+  - PYTHONUNBUFFERED=1
   container_name: follower_1
 
  web3:
@@ -40,7 +42,8 @@ services:
   - dist-trial
   environment:
   - DATABASE_FILENAME="test3.db"
-  - LEADER=False
+  - LEADER=0
+  - PYTHONUNBUFFERED=1
   container_name: follower_2
   
 networks:
