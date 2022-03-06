@@ -13,9 +13,16 @@
     * The file - *docker-compose.dev.yml* is the docker-compose file specific to Windows OS
     * The file - *docker-compose-linux.yml* is the docker-compose specific to Linux
 * Hence, when building the docker, use the OS specific commands given below:
-    * Windows -  ```docker-compose -f docker-compose.dev.yml up --build```
-    * Linux - ```docker-compose -f docker-compose-linux.yml ip --build``` 
 
+##### Single Node
+* Windows -  ```docker-compose -f docker-compose.dev.yml up --build```
+* Linux - ```docker-compose -f docker-compose-linux.yml ip --build``` 
+
+##### Multi Node
+* Windows -  ```docker-compose -f docker-compose.multi.yml up --build```
+* Linux - ```docker-compose -f docker-compose-linux.multi.yml ip --build``` 
+
+<!-- 
 ## **Application Video**
 * [Box Link](https://buffalo.box.com/s/p5x0sm07q9uy6b3xo7mvijivsdwiovtf)
-
+ -->
