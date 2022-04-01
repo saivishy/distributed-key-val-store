@@ -8,3 +8,4 @@ MarkupSafe==2.0.1
 SQLAlchemy==1.4.31
 Werkzeug==2.0.3
 requests
+timeout-decorator==0.5.0

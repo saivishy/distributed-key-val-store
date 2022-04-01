@@ -1,16 +1,73 @@
 from flask import Flask, render_template, url_for, request, redirect
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+import time
 import os
 import requests
+import json
+import socket
+import traceback
+import threading
+import timeout_decorator
 
 app =  Flask(__name__)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.environ.get('DATABASE_FILENAME')}"
 
 db = SQLAlchemy(app)
+ 
+def makePulseMessage(request_type:str):
+    print('inside MPM ======MAKING MESSAGE=========')    
+    pulse_msg = {
+        "sender_name" : os.environ.get('NODEID'), 
+        "request" : request_type,
+        "term": os.environ.get('current_term'),
+        "key": 0,
+        "value": 0
+        }
+    pulse_msg_bytes = json.dumps(pulse_msg).encode()
+    return pulse_msg_bytes
 
+def heartBeatSend(skt):
+    hb_interval = 10
+    print('inside HBS =======SENDING MESSAGE========')
+    print(os.environ.get("LEADER"))
+    print(type(os.environ.get("LEADER")))
+    while os.environ.get("LEADER")== "1":
+        msg = makePulseMessage("appendRPC")
+        for node in range(1,4):
+            if node != node_name:
+                skt.sendto(msg, (f"node{node}", 5006))
+                print(f"HEARTBEAT TO node{node} SENT!")
+        print(f"GONNA SLEEP FOR {hb_interval} secs")
+        time.sleep(hb_interval)
 
+election_timeout_interval = 5
+@timeout_decorator.timeout(election_timeout_interval, use_signals=False)
+def listener(skt):
+    print('inside list ======LISTENING FOR MESSAGES=======')
+    while True:
+        try:
+            recv_msg, addr = skt.recvfrom(1024) # may need to change byte size - find out
+        except:
+            print(f"Error: Failed while fetching from socket - {traceback.print_exc()}")
+        
+        decoded_msg = json.loads(recv_msg.decode('utf-8'))
+        return decoded_msg
+
+def heartBeatRecv(skt): # both heartbeat Send and recv can be put in the same function
+    print('inside HBR ======RECV MESSAGE=========')
+    while os.environ.get("LEADER")== "0":
+        try:
+
+            decoded_msg = listener(skt)
+            print("GOT A message here m8!",decoded_msg)
+        
+        except timeout_decorator.TimeoutError:
+            # change state
+            print("ELECTION TIMEOUT!!!!!")
+        # store decoded_msg to logs
+        # update other vals too
 
 class Person(db.Model):
     id = db.Column(db.Integer, primary_key= True)
@@ -32,9 +89,9 @@ def index():
         lead = os.environ.get('LEADER')
         if  lead == '1':
             files= {"name": (None,record_name) , "hash": (None,record_hash)}
-            url1 = 'http://follower_1:5000/'
+            url1 = 'http://node2:5000/'
             log1 = requests.post(url1,  files =files)
-            url2 = 'http://follower_2:5000/'
+            url2 = 'http://node3:5000/'
             log2 = requests.post(url2, files =files)
         else:
             print('NOT LEADER-------------------')
@@ -56,10 +113,10 @@ def delete(id):
 
     lead = os.environ.get('LEADER')
     if  lead == '1': 
-        for node in range(1,3):
-            url = f"http://follower_{node}:5000/delete/{id}"
+        for node in range(2,4):
+            url = f"http://node{node}:5000/delete/{id}"
             log = requests.get(url)
-            print(f"SENT to delete GET to follower_{node}")
+            print(f"SENT to delete GET to node{node}")
             print(log)
     else:
         print('NOT LEADER-------------------')
@@ -81,15 +138,15 @@ def update(id):
         if request.method == 'POST':
             record.name = request.form['name']
             record_name = request.form['name']
-            for node in range(1,3):
-                url = f"http://follower_{node}:5000//update/{id}"
+            for node in range(2,4):
+                url = f"http://node{node}:5000//update/{id}"
                 get_log = requests.get(url)
-                print(f"SENT to update GET to follower_{node}")
+                print(f"SENT to update GET to node{node}")
                 print(get_log)
                 
                 files= {"name": (None,record_name)}
                 post_log = requests.post(url,  files =files)
-                print(f"SENT to update POST to follower_{node}")
+                print(f"SENT to update POST to node{node}")
                 print(post_log)
             
             try:
@@ -118,16 +175,24 @@ def update(id):
         else:
             return render_template('update.html', record = record )
 
-# @app.route('/view/<int:id>')
-# def view(id):
-#     record_to_delete = Person.query.get_or_404(id)
-
-#     try:
-#         db.session.query(record_to_delete)
-#         db.session.commit()
-#         return redirect('/')
-#     except:
-#         return 'There was an issue deleting that record'
 
 if __name__ == "__main__":
-    app.run(debug=True, host ='0.0.0.0', port=5000)
+
+    node_name = os.environ.get('NODEID')
+    print(node_name)
+
+    pulse_sending_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+    pulse_sending_socket.bind((node_name, 5005))
+
+    pulse_listening_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+    pulse_listening_socket.bind((node_name, 5006))
+    
+    # #Starting thread 1
+    threading.Thread(target=heartBeatSend, args=[pulse_sending_socket]).start()
+
+    #Starting thread 2
+    threading.Thread(target=heartBeatRecv, args= [pulse_listening_socket]).start()
+
+    # lambda runs app.run within a function. Function passed to thread
+    threading.Thread(target=lambda: app.run(debug=False, host ='0.0.0.0', port=5000, use_reloader=False)).start()
+
