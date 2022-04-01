@@ -4,8 +4,11 @@ services:
  web1:
   build:
    context: .
+  container_name: node1
   ports:
   - 8000:5000
+  - 8001:5005
+  - 8002:5006
   volumes:
   - ./:/app
   networks:
@@ -14,13 +17,17 @@ services:
   - DATABASE_FILENAME="test1.db"
   - LEADER=1
   - PYTHONUNBUFFERED=1
-  container_name: leader
+  - NODEID=node1
+  - current_term=1
 
  web2:
   build:
    context: .
+  container_name: node2
   ports:
   - 5100:5000
+  - 5101:5005
+  - 5102:5006
   volumes:
   - ./:/app
   networks:
@@ -29,13 +36,17 @@ services:
   - DATABASE_FILENAME="test2.db"
   - LEADER=0
   - PYTHONUNBUFFERED=1
-  container_name: follower_1
+  - NODEID=node2
+  - current_term=1
 
  web3:
   build:
    context: .
+  container_name: node3
   ports:
-  - 5101:5000
+  - 5200:5000
+  - 5201:5005
+  - 5202:5006
   volumes:
   - ./:/app
   networks:
@@ -44,7 +55,8 @@ services:
   - DATABASE_FILENAME="test3.db"
   - LEADER=0
   - PYTHONUNBUFFERED=1
-  container_name: follower_2
+  - NODEID=node3
+  - current_term=1
   
 networks:
   dist-trial:
