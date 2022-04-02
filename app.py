@@ -1,3 +1,4 @@
+from tabnanny import check
 from flask import Flask, render_template, url_for, request, redirect
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
@@ -16,14 +17,14 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.environ.get('DATABASE_FI
 
 db = SQLAlchemy(app)
  
-def makePulseMessage(request_type:str):
+def makeMessage(request_type:str, key = 0, value = 0):
     print('inside MPM ======MAKING MESSAGE=========')    
     pulse_msg = {
         "sender_name" : os.environ.get('NODEID'), 
         "request" : request_type,
         "term": os.environ.get('current_term'),
-        "key": 0,
-        "value": 0
+        "key": key,
+        "value": value
         }
     pulse_msg_bytes = json.dumps(pulse_msg).encode()
     return pulse_msg_bytes
@@ -34,7 +35,7 @@ def heartBeatSend(skt):
     print(os.environ.get("LEADER"))
     print(type(os.environ.get("LEADER")))
     while os.environ.get("LEADER")== "1":
-        msg = makePulseMessage("appendRPC")
+        msg = makeMessage("appendRPC")
         for node in range(1,4):
             if node != node_name:
                 skt.sendto(msg, (f"node{node}", 5006))
@@ -42,32 +43,80 @@ def heartBeatSend(skt):
         print(f"GONNA SLEEP FOR {hb_interval} secs")
         time.sleep(hb_interval)
 
-election_timeout_interval = 5
-@timeout_decorator.timeout(election_timeout_interval, use_signals=False)
-def listener(skt):
-    print('inside list ======LISTENING FOR MESSAGES=======')
-    while True:
+def requestVoteRPC(skt, key:int, value:int):
+    print("Before Voting State: ", os.environ.get("STATE"))
+    os.environ["STATE"] = "candidate"
+    os.environ["current_term"] = os.environ.get("current_term")+1
+    print(os.environ.get("current_term"))
+    print(os.environ.get("STATE"))
+    msg = makeMessage("requestVoteRPC")
+    for node in range(1, num_of_nodes):
+        if node != node_name:
+            skt.sendto(msg, (f"node{node}", 5006))
+            print(f"requestVoteRPC sent to node{node} !")
+     
+# wrap with timeout decorator so when passing using try except
+def requestVoteACK(skt, key:int, value:int):
+    votecount=0
+    while (vote_count<(num_of_nodes/2)):
         try:
-            recv_msg, addr = skt.recvfrom(1024) # may need to change byte size - find out
-        except:
-            print(f"Error: Failed while fetching from socket - {traceback.print_exc()}")
-        
-        decoded_msg = json.loads(recv_msg.decode('utf-8'))
-        return decoded_msg
+            decoded_msg = listener_wrapper(200, skt)
+            if (decoded_msg["request_type"] == "appendRPC"):
+                os.environ["STATE"] = "follower"
+                os.environ["current_term"] = os.environ.get("current_term")+1
+
+                
+                
+            
+        except timeout_decorator.TimeoutError:
+                print("timed out listening for a single vote in requestVoteACK")
+                break
+   
+    
+def listener_wrapper(election_timeout_interval = 5, skt):
+    @timeout_decorator.timeout(election_timeout_interval, use_signals=False)
+    def listener(skt):
+        print('inside list ======LISTENING FOR MESSAGES=======')
+        while True:
+            try:
+                recv_msg, addr = skt.recvfrom(1024) # may need to change byte size - find out
+            except:
+                print(f"Error: Failed while fetching from socket - {traceback.print_exc()}")
+            
+            decoded_msg = json.loads(recv_msg.decode('utf-8'))
+            return decoded_msg
 
 def heartBeatRecv(skt): # both heartbeat Send and recv can be put in the same function
     print('inside HBR ======RECV MESSAGE=========')
-    while os.environ.get("LEADER")== "0":
-        try:
+    while True:
+        while os.environ.get("STATUS")== "follower":
+            try:
 
-            decoded_msg = listener(skt)
-            print("GOT A message here m8!",decoded_msg)
+                decoded_msg = listener_wrapper(10, skt)
+                print("GOT A message here m8!",decoded_msg)
+            
+            except timeout_decorator.TimeoutError:
+                # change state
+                print("ELECTION TIMEOUT!!!!!")
+                requestVoteRPC(params)
+                break
+            # store decoded_msg to logs
+            # update other vals too
+
+        while os.environ.get("STATUS")== "candidate":
+            
+            try:
+
+                decoded_msg = listener_wrapper(200, skt)
+                print("GOT A message here m8!",decoded_msg)
+                # check if message is vote  from decoded_msg
+
+            except timeout_decorator.TimeoutError:
+                # change state
+                print("VOTE WAITING TIMEOUT")
+                break
+            # store decoded_msg to logs
         
-        except timeout_decorator.TimeoutError:
-            # change state
-            print("ELECTION TIMEOUT!!!!!")
-        # store decoded_msg to logs
-        # update other vals too
 
 class Person(db.Model):
     id = db.Column(db.Integer, primary_key= True)
@@ -188,9 +237,11 @@ if __name__ == "__main__":
     pulse_listening_socket.bind((node_name, 5006))
     
     # #Starting thread 1
-    threading.Thread(target=heartBeatSend, args=[pulse_sending_socket]).start()
+    # change signature heartbeatSend
+    threading.Thread(target=heartBeatSend, args=[pulse_sending_socket]).start() 
 
     #Starting thread 2
+    # change signature heartbeatRecv
     threading.Thread(target=heartBeatRecv, args= [pulse_listening_socket]).start()
 
     # lambda runs app.run within a function. Function passed to thread
