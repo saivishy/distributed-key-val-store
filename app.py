@@ -42,7 +42,7 @@ def heartBeatSend(skt, hb_interval = 10):
         print(f"GONNA SLEEP FOR {hb_interval} secs")
         time.sleep(hb_interval)
     
-def listener_wrapper(election_timeout_interval = 5, skt):
+def listener_wrapper(skt, election_timeout_interval=5):
     @timeout_decorator.timeout(election_timeout_interval, use_signals=False)
     def listener(skt):
         print('inside listener ======LISTENING FOR MESSAGES=======')
@@ -74,15 +74,13 @@ def voteMessageSend(skt, incoming_RPC_msg):
         skt.sendto(msg, (incoming_RPC_msg["sender"], 5006))
         os.environ["voted"] = "1"
 
-
-
-def requestVoteACK_wrapper(timeout_interval = 30, skt):
+def requestVoteACK_wrapper(skt, timeout_interval=30):
     @timeout_decorator.timeout(timeout_interval, use_signals=False)
-    def requestVoteACK(skt = pulse_sending_socket, key:int, value:int):
+    def requestVoteACK(skt, key:int, value:int):
         vote_count=1
         while (vote_count<(num_of_nodes/2)): 
             try:
-                decoded_msg = listener_wrapper(200, skt)
+                decoded_msg = listener_wrapper(skt, 200)
 
                 # RPC break condition
                 if (decoded_msg["request_type"] == "appendRPC"):
@@ -106,12 +104,12 @@ def requestVoteACK_wrapper(timeout_interval = 30, skt):
                     break
         return vote_count                
    
-def heartBeatRecv(skt): 
+def heartBeatRecv(skt):
     print('inside HBR ======RECV MESSAGE=========')
     while True:
         while os.environ.get("STATUS")== "follower":
             try:
-                decoded_msg = listener_wrapper(20, skt)
+                decoded_msg = listener_wrapper(skt, 20)
                 print("GOT A message here m8!",decoded_msg)
 
             except timeout_decorator.TimeoutError:
@@ -120,9 +118,8 @@ def heartBeatRecv(skt):
                 break
 
         while os.environ.get("STATUS")== "candidate":
-            
             try:
-                requestVoteACK_wrapper(timeout_interval = 30, skt)
+                requestVoteACK_wrapper(skt, 30)
             except timeout_decorator.TimeoutError:
                 print("VOTE WAITING TIMEOUT")
                 break
@@ -258,5 +255,5 @@ if __name__ == "__main__":
     threading.Thread(target=heartBeatRecv, args= [pulse_listening_socket]).start()
 
     # lambda runs app.run within a function. Function passed to thread
-    threading.Thread(target=lambda: app.run(debug=False, host ='0.0.0.0', port=5000, use_reloader=False)).start()
+    # threading.Thread(target=lambda: app.run(debug=False, host ='0.0.0.0', port=5000, use_reloader=False)).start()
 
