@@ -15,8 +15,8 @@ services:
   - dist-trial
   environment:
   - DATABASE_FILENAME="test1.db"
-  # - STATUS=leader 
-  # - LEADER_ID=node1
+  - STATE=leader 
+  - LEADER_ID=node1
   - LEADER=1
   - PYTHONUNBUFFERED=1
   - NODEID=node1
@@ -36,8 +36,8 @@ services:
   - dist-trial
   environment:
   - DATABASE_FILENAME="test2.db"
-  # - STATUS=follower
-  # - LEADER_ID=node1 
+  - STATE=follower
+  - LEADER_ID=node1 
   - LEADER=0
   - PYTHONUNBUFFERED=1
   - NODEID=node2
@@ -57,8 +57,8 @@ services:
   - dist-trial
   environment:
   - DATABASE_FILENAME="test3.db"
-  # - STATUS=follower 
-  # - LEADER_ID=node1
+  - STATE=follower 
+  - LEADER_ID=node1
   - LEADER=0
   - PYTHONUNBUFFERED=1
   - NODEID=node3

@@ -29,19 +29,31 @@ def makeMessage(request_type:str, key = 0, value = 0):
     pulse_msg_bytes = json.dumps(pulse_msg).encode()
     return pulse_msg_bytes
 
-def heartBeatSend(skt):
-    hb_interval = 10
+def heartBeatSend(skt, hb_interval = 10):
     print('inside HBS =======SENDING MESSAGE========')
-    print(os.environ.get("LEADER"))
-    print(type(os.environ.get("LEADER")))
-    while os.environ.get("LEADER")== "1":
+    print(os.environ.get("STATE"))
+    print(type(os.environ.get("STATE")))
+    while (os.environ.get("STATE")=="leader"):
         msg = makeMessage("appendRPC")
         for node in range(1,4):
-            if node != node_name:
+            if node != node_name: 
                 skt.sendto(msg, (f"node{node}", 5006))
                 print(f"HEARTBEAT TO node{node} SENT!")
         print(f"GONNA SLEEP FOR {hb_interval} secs")
         time.sleep(hb_interval)
+    
+def listener_wrapper(election_timeout_interval = 5, skt):
+    @timeout_decorator.timeout(election_timeout_interval, use_signals=False)
+    def listener(skt):
+        print('inside listener ======LISTENING FOR MESSAGES=======')
+        while True:
+            try:
+                recv_msg, addr = skt.recvfrom(1024) # may need to change byte size - find out
+            except:
+                print(f"Error: Failed while fetching from socket - {traceback.print_exc()}")
+            
+            decoded_msg = json.loads(recv_msg.decode('utf-8'))
+            return decoded_msg
 
 def requestVoteRPC(skt, key:int, value:int):
     print("Before Voting State: ", os.environ.get("STATE"))
@@ -54,65 +66,64 @@ def requestVoteRPC(skt, key:int, value:int):
         if node != node_name:
             skt.sendto(msg, (f"node{node}", 5006))
             print(f"requestVoteRPC sent to node{node} !")
-     
-# wrap with timeout decorator so when passing using try except
-def requestVoteACK(skt, key:int, value:int):
-    votecount=0
-    while (vote_count<(num_of_nodes/2)):
-        try:
-            decoded_msg = listener_wrapper(200, skt)
-            if (decoded_msg["request_type"] == "appendRPC"):
-                os.environ["STATE"] = "follower"
-                os.environ["current_term"] = os.environ.get("current_term")+1
 
-                
-                
-            
-        except timeout_decorator.TimeoutError:
-                print("timed out listening for a single vote in requestVoteACK")
-                break
-   
-    
-def listener_wrapper(election_timeout_interval = 5, skt):
-    @timeout_decorator.timeout(election_timeout_interval, use_signals=False)
-    def listener(skt):
-        print('inside list ======LISTENING FOR MESSAGES=======')
-        while True:
+def voteMessageSend(skt, incoming_RPC_msg):
+    # if followers term is less than request term and not voted yet grant vote
+    if (os.environ.get('current_term') < incoming_RPC_msg["term"]) and (os.environ.get('voted') == "0"):
+        msg = makeMessage("voteMessage")
+        skt.sendto(msg, (incoming_RPC_msg["sender"], 5006))
+        os.environ["voted"] = "1"
+
+
+
+def requestVoteACK_wrapper(timeout_interval = 30, skt):
+    @timeout_decorator.timeout(timeout_interval, use_signals=False)
+    def requestVoteACK(skt = pulse_sending_socket, key:int, value:int):
+        vote_count=1
+        while (vote_count<(num_of_nodes/2)): 
             try:
-                recv_msg, addr = skt.recvfrom(1024) # may need to change byte size - find out
-            except:
-                print(f"Error: Failed while fetching from socket - {traceback.print_exc()}")
-            
-            decoded_msg = json.loads(recv_msg.decode('utf-8'))
-            return decoded_msg
+                decoded_msg = listener_wrapper(200, skt)
 
-def heartBeatRecv(skt): # both heartbeat Send and recv can be put in the same function
+                # RPC break condition
+                if (decoded_msg["request_type"] == "appendRPC"):
+                    os.environ["STATE"] = "follower"
+                    os.environ["LEADER_ID"] = decoded_msg["sender_name"]    
+                    vote_count = -1 
+                    break
+                
+                # RPC Voteback condition
+                if (decoded_msg["request_type"] == "voteMessage"):
+                    # decode vote message if you add negative ACK
+                    vote_count+=1
+                
+                # RPC requestVoteRPC condition
+                if (decoded_msg["request_type"] == "requestVoteRPC"):
+                    voteMessageSend(pulse_sending_socket, decoded_msg)
+                    continue
+                
+            except timeout_decorator.TimeoutError:
+                    print("timed out listening for a single vote in requestVoteACK")
+                    break
+        return vote_count                
+   
+def heartBeatRecv(skt): 
     print('inside HBR ======RECV MESSAGE=========')
     while True:
         while os.environ.get("STATUS")== "follower":
             try:
-
-                decoded_msg = listener_wrapper(10, skt)
+                decoded_msg = listener_wrapper(20, skt)
                 print("GOT A message here m8!",decoded_msg)
-            
+
             except timeout_decorator.TimeoutError:
-                # change state
                 print("ELECTION TIMEOUT!!!!!")
-                requestVoteRPC(params)
+                requestVoteRPC(skt) # Changes state to candidate and sends out RPC
                 break
-            # store decoded_msg to logs
-            # update other vals too
 
         while os.environ.get("STATUS")== "candidate":
             
             try:
-
-                decoded_msg = listener_wrapper(200, skt)
-                print("GOT A message here m8!",decoded_msg)
-                # check if message is vote  from decoded_msg
-
+                requestVoteACK_wrapper(timeout_interval = 30, skt)
             except timeout_decorator.TimeoutError:
-                # change state
                 print("VOTE WAITING TIMEOUT")
                 break
             # store decoded_msg to logs
@@ -230,6 +241,8 @@ if __name__ == "__main__":
     node_name = os.environ.get('NODEID')
     print(node_name)
 
+    num_of_nodes = 3
+
     pulse_sending_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
     pulse_sending_socket.bind((node_name, 5005))
 
@@ -238,7 +251,7 @@ if __name__ == "__main__":
     
     # #Starting thread 1
     # change signature heartbeatSend
-    threading.Thread(target=heartBeatSend, args=[pulse_sending_socket]).start() 
+    threading.Thread(target=heartBeatSend, args=[pulse_sending_socket, 10]).start() 
 
     #Starting thread 2
     # change signature heartbeatRecv
