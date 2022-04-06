@@ -6,7 +6,7 @@
 * The UI is developed using HTML and CSS
 
 ## **Operating Systems**
-* Windows 10 and Fedora
+* Windows 10 and Fedora 34
 
 ##  **Important note**
 * There are two docker-compose files, each specific to Windows and Linux OS
@@ -16,11 +16,11 @@
 
 ##### Single Node
 * Windows -  ```docker-compose -f docker-compose.dev.yml up --build```
-* Linux - ```docker-compose -f docker-compose-linux.yml ip --build``` 
+* Linux - ```docker-compose -f docker-compose-linux.yml up --build``` 
 
 ##### Multi Node
 * Windows -  ```docker-compose -f docker-compose.multi.yml up --build```
-* Linux - ```docker-compose -f docker-compose-linux.multi.yml ip --build``` 
+* Linux - ```docker-compose -f docker-compose-linux.multi.yml up --build``` 
 
 <!-- 
 ## **Application Video**
