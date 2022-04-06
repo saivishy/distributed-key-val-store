@@ -21,6 +21,7 @@ services:
   - PYTHONUNBUFFERED=1
   - NODEID=node1
   - current_term=1
+  - voted=0 
 
  web2:
   build:
@@ -42,6 +43,7 @@ services:
   - PYTHONUNBUFFERED=1
   - NODEID=node2
   - current_term=1
+  - voted=0 
 
  web3:
   build:
@@ -63,6 +65,7 @@ services:
   - PYTHONUNBUFFERED=1
   - NODEID=node3
   - current_term=1
+  - voted=0 
   
 networks:
   dist-trial:
