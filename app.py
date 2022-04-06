@@ -16,7 +16,8 @@ app =  Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.environ.get('DATABASE_FILENAME')}"
 
 db = SQLAlchemy(app)
- 
+
+## creating a module to generate message based on request type 
 def makeMessage(request_type:str, key = 0, value = 0):
     print('inside MPM ======MAKING MESSAGE=========')    
     pulse_msg = {
@@ -29,19 +30,24 @@ def makeMessage(request_type:str, key = 0, value = 0):
     pulse_msg_bytes = json.dumps(pulse_msg).encode()
     return pulse_msg_bytes
 
+# module to send heartbeats if the node is a leader node
+# utilizes makeMessage module to generate heartbeat specific message
 def heartBeatSend(skt, hb_interval = 10):
     print('inside HBS =======SENDING MESSAGE========')
-    print(os.environ.get("STATE"))
-    print(type(os.environ.get("STATE")))
+    #print(os.environ.get("STATE"))
+    #print(type(os.environ.get("STATE")))
     while (os.environ.get("STATE")=="leader"):
         msg = makeMessage("appendRPC")
         for node in range(1,4):
-            if node != node_name: 
+            # to differentiate between sender and target nodes
+            if f"node{node}" != node_name: 
                 skt.sendto(msg, (f"node{node}", 5006))
                 print(f"HEARTBEAT TO node{node} SENT!")
         print(f"GONNA SLEEP FOR {hb_interval} secs")
         time.sleep(hb_interval)
-    
+
+
+# listener wrapper to listen for the heartbeat from leader
 def listener_wrapper(skt, election_timeout_interval=5):
     @timeout_decorator.timeout(election_timeout_interval, use_signals=False)
     def listener(skt):
@@ -52,9 +58,12 @@ def listener_wrapper(skt, election_timeout_interval=5):
             except:
                 print(f"Error: Failed while fetching from socket - {traceback.print_exc()}")
             
-            decoded_msg = json.loads(recv_msg.decode('utf-8'))
+            decoded_msg = json.loads(recv_msg.decode('utf-8'))  ## shouldn't this be in the try block
             return decoded_msg
+    
+    return listener(skt)
 
+# 
 def requestVoteRPC(skt, key:int, value:int):
     print("Before Voting State: ", os.environ.get("STATE"))
     os.environ["STATE"] = "candidate"
@@ -62,18 +71,20 @@ def requestVoteRPC(skt, key:int, value:int):
     print(os.environ.get("current_term"))
     print(os.environ.get("STATE"))
     msg = makeMessage("requestVoteRPC")
-    for node in range(1, num_of_nodes):
-        if node != node_name:
+    for node in range(1, num_of_nodes+1):
+        if f"node{node}" != node_name:
             skt.sendto(msg, (f"node{node}", 5006))
             print(f"requestVoteRPC sent to node{node} !")
 
 def voteMessageSend(skt, incoming_RPC_msg):
     # if followers term is less than request term and not voted yet grant vote
-    if (os.environ.get('current_term') < incoming_RPC_msg["term"]) and (os.environ.get('voted') == "0"):
+    if (os.environ.get('current_term') < incoming_RPC_msg["term"]) and (os.environ.get("voted")
+     == "0"):
         msg = makeMessage("voteMessage")
         skt.sendto(msg, (incoming_RPC_msg["sender"], 5006))
         os.environ["voted"] = "1"
 
+## change timeout_interval
 def requestVoteACK_wrapper(skt, timeout_interval=30):
     @timeout_decorator.timeout(timeout_interval, use_signals=False)
     def requestVoteACK(skt, key:int, value:int):
@@ -107,8 +118,10 @@ def requestVoteACK_wrapper(skt, timeout_interval=30):
 def heartBeatRecv(skt):
     print('inside HBR ======RECV MESSAGE=========')
     while True:
-        while os.environ.get("STATUS")== "follower":
+        while os.environ.get("STATE")== "follower":
+            print("inside HBR follower loop before try")
             try:
+                print("inside HBR follower loop after try")
                 decoded_msg = listener_wrapper(skt, 20)
                 print("GOT A message here m8!",decoded_msg)
 
@@ -118,6 +131,7 @@ def heartBeatRecv(skt):
                 break
 
         while os.environ.get("STATUS")== "candidate":
+            # mirror the time argument for receivevite_ACK
             try:
                 requestVoteACK_wrapper(skt, 30)
             except timeout_decorator.TimeoutError:

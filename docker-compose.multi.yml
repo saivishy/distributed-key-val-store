@@ -4,47 +4,66 @@ services:
  web1:
   build:
    context: .
+  container_name: node1
   ports:
   - 8000:5000
+  - 8001:5005
+  - 8002:5006
   volumes:
   - .\:/app
-  networks:
-  - dist-trial
   environment:
   - DATABASE_FILENAME="test1.db"
+  - STATE=leader 
+  - LEADER_ID=node1
   - LEADER=1
   - PYTHONUNBUFFERED=1
-  container_name: leader
+  - NODEID=node1
+  - current_term=1
+  - voted=0
 
  web2:
   build:
    context: .
+  container_name: node2
   ports:
   - 5100:5000
+  - 5101:5005
+  - 5102:5006
   volumes:
   - .\:/app
-  networks:
-  - dist-trial
   environment:
   - DATABASE_FILENAME="test2.db"
+  - STATE=follower
+  - LEADER_ID=node1 
   - LEADER=0
   - PYTHONUNBUFFERED=1
-  container_name: follower_1
+  - NODEID=node2
+  - current_term=1
+  - voted=0
 
  web3:
   build:
    context: .
+  container_name: node3
   ports:
-  - 5101:5000
+  - 5200:5000
+  - 5201:5005
+  - 5202:5006
   volumes:
   - .\:/app
-  networks:
-  - dist-trial
   environment:
   - DATABASE_FILENAME="test3.db"
+  - STATE=follower 
+  - LEADER_ID=node1
   - LEADER=0
   - PYTHONUNBUFFERED=1
-  container_name: follower_2
-  
-networks:
-  dist-trial:
+  - NODEID=node3
+  - current_term=1
+  - voted=0
+
+
+ controller:
+  container_name: Controller
+  build: Controller/.
+  stdin_open: true
+
