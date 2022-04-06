@@ -93,35 +93,36 @@ def requestVoteACK_wrapper(skt, timeout_interval=30):
     def requestVoteACK(skt, key:int, value:int):
         print("INSIDE RVRPC")
         vote_count=1
-        while (vote_count<(num_of_nodes/2)): 
-            print("INSIDE while RVPC numbotes=",vote_count)
-            try:
-                decoded_msg = listener_wrapper(skt, 200)
+        while True:
+            while (vote_count<(num_of_nodes/2)) and os.environ.get("STATE")== "candidate": 
+                print("INSIDE while RVPC numbotes=",vote_count)
+                try:
+                    decoded_msg = listener_wrapper(skt, 200)
 
-                # RPC break condition
-                if (decoded_msg["request"] == "appendRPC"):
-                    os.environ["STATE"] = "follower"
-                    os.environ["LEADER_ID"] = decoded_msg["sender_name"]    
-                    vote_count = -1 
-                    break
-                
-                # RPC Voteback condition
-                if (decoded_msg["request"] == "voteMessage"):
-                    # decode vote message if you add negative ACK
-                    print("GOT A VOTE! votecount now ", vote_count+1)
-                    vote_count+=1
-                    continue
-                
-                # RPC requestVoteRPC condition
-                if (decoded_msg["request"] == "requestVoteRPC"):
-                    voteMessageSend(pulse_sending_socket, decoded_msg)
-                    continue
-                
-            except timeout_decorator.TimeoutError:
-                    print("timed out listening for a single vote in requestVoteACK")
-                    break
-        return vote_count   
-    return requestVoteACK(skt, timeout_interval)             
+                    # RPC break condition
+                    if (decoded_msg["request"] == "appendRPC"):
+                        os.environ["STATE"] = "follower"
+                        os.environ["LEADER_ID"] = decoded_msg["sender_name"]    
+                        vote_count = -1 
+                        break
+                    
+                    # RPC Voteback condition
+                    if (decoded_msg["request"] == "voteMessage"):
+                        # decode vote message if you add negative ACK
+                        print("GOT A VOTE! votecount now ", vote_count+1)
+                        vote_count+=1
+                        continue
+                    
+                    # RPC requestVoteRPC condition
+                    if (decoded_msg["request"] == "requestVoteRPC"):
+                        voteMessageSend(pulse_sending_socket, decoded_msg)
+                        continue
+                    
+                except timeout_decorator.TimeoutError:
+                        print("timed out listening for a single vote in requestVoteACK")
+                        break
+            return vote_count   
+    return requestVoteACK(skt, None, None)             
    
 def heartBeatRecv(skt):
     print('inside HBR ======RECV MESSAGE=========')
@@ -149,7 +150,7 @@ def heartBeatRecv(skt):
                 requestVoteRPC(skt) # Changes state to candidate and sends out RPC
                 break
 
-        while os.environ.get("STATUS")== "candidate":
+        while os.environ.get("STATE")== "candidate":
             print("inside HBR candidate loop before try")
 
             # mirror the time argument for receivevite_ACK
