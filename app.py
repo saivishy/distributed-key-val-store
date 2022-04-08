@@ -47,7 +47,6 @@ def heartBeatSend(skt, hb_interval = 10):
             msg = makeMessage("APPEND_RPC")
             active_node_count = num_of_nodes
             for node in range(1,num_of_nodes+1):
-                print(active_node_count)
                 # to differentiate between sender and target nodes
                 if f"Node{node}" != node_name: 
                     try:
@@ -58,6 +57,7 @@ def heartBeatSend(skt, hb_interval = 10):
                         active_node_count =  active_node_count -1
 
             os.environ["ACTIVE_NODES"] = str(active_node_count)
+            print(active_node_count," nodes are active! ")
             print(f"GONNA SLEEP FOR {hb_interval} secs")
             time.sleep(hb_interval)
 
@@ -188,8 +188,7 @@ def normalRecv(skt): # Common Recv
     startTimerE()
     
     while True:
-        global num_of_nodes
-        print(os.environ.get("ACTIVE_NODES")," nodes are active!") 
+        global num_of_nodes 
         decoded_msg = listener(skt)
         print("GOT A message here m8!",decoded_msg)
          
