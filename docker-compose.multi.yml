@@ -4,7 +4,7 @@ services:
  web1:
   build:
    context: .
-  container_name: node1
+  container_name: Node1
   ports:
   - 8000:5000
   - 8001:5005
@@ -14,17 +14,18 @@ services:
   environment:
   - DATABASE_FILENAME="test1.db"
   - STATE=leader 
-  - LEADER_ID=node1
+  - LEADER_ID=Node1
   - LEADER=1
   - PYTHONUNBUFFERED=1
-  - NODEID=node1
+  - NODEID=Node1
   - current_term=1
-  - voted=0
+  - voted=1
+  - SHUTDOWN_FLAG=0
 
  web2:
   build:
    context: .
-  container_name: node2
+  container_name: Node2
   ports:
   - 5100:5000
   - 5101:5005
@@ -34,17 +35,18 @@ services:
   environment:
   - DATABASE_FILENAME="test2.db"
   - STATE=follower
-  - LEADER_ID=node1 
+  - LEADER_ID=Node1 
   - LEADER=0
   - PYTHONUNBUFFERED=1
-  - NODEID=node2
+  - NODEID=Node2
   - current_term=1
   - voted=0
+  - SHUTDOWN_FLAG=0
 
  web3:
   build:
    context: .
-  container_name: node3
+  container_name: Node3
   ports:
   - 5200:5000
   - 5201:5005
@@ -54,13 +56,53 @@ services:
   environment:
   - DATABASE_FILENAME="test3.db"
   - STATE=follower 
-  - LEADER_ID=node1
+  - LEADER_ID=Node1
   - LEADER=0
   - PYTHONUNBUFFERED=1
-  - NODEID=node3
+  - NODEID=Node3
   - current_term=1
   - voted=0
+  - SHUTDOWN_FLAG=0
 
+#  web4:
+#   build:
+#    context: .
+#   container_name: Node4
+#   ports:
+#   - 5200:5000
+#   - 5201:5005
+#   - 5202:5006
+#   volumes:
+#   - .\:/app
+#   environment:
+#   - DATABASE_FILENAME="test4.db"
+#   - STATE=follower 
+#   - LEADER_ID=Node1
+#   - LEADER=0
+#   - PYTHONUNBUFFERED=1
+#   - NODEID=Node3
+#   - current_term=1
+#   - voted=0
+
+#  web5:
+#   build:
+#    context: .
+#   container_name: Node5
+#   ports:
+#   - 5200:5000
+#   - 5201:5005
+#   - 5202:5006
+#   volumes:
+#   - .\:/app
+#   environment:
+#   - DATABASE_FILENAME="test5.db"
+#   - STATE=follower 
+#   - LEADER_ID=Node1
+#   - LEADER=0
+#   - PYTHONUNBUFFERED=1
+#   - NODEID=Node3
+#   - current_term=1
+#   - voted=0
 
  controller:
   container_name: Controller

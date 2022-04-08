@@ -1,3 +1,4 @@
+from glob import glob
 from tabnanny import check
 from flask import Flask, render_template, url_for, request, redirect
 from flask_sqlalchemy import SQLAlchemy
@@ -10,6 +11,9 @@ import socket
 import traceback
 import threading
 from threading import *
+from sqlalchemy import false
+import sys
+
 
 app =  Flask(__name__)
 
@@ -32,16 +36,22 @@ def makeMessage(request_type:str, key = 0, value = 0):
     return pulse_msg_bytes
 
 def heartBeatSend(skt, hb_interval = 10):
-    while (os.environ.get("STATE")=="leader"):
-        print('Sending HeartBeat...')
-        msg = makeMessage("APPEND_RPC")
-        for node in range(1,4):
-            # to differentiate between sender and target nodes
-            if f"node{node}" != node_name: 
-                skt.sendto(msg, (f"node{node}", 5006))
-                print(f"HEARTBEAT TO node{node} SENT!")
-        print(f"GONNA SLEEP FOR {hb_interval} secs")
-        time.sleep(hb_interval)
+    while True:
+        if (os.environ["SHUTDOWN_FLAG"])=="1":
+            sys.exit()
+        while (os.environ.get("STATE")=="leader"):
+            if (os.environ["SHUTDOWN_FLAG"])=="1":
+                sys.exit()
+            
+            print('Sending HeartBeat...')
+            msg = makeMessage("APPEND_RPC")
+            for node in range(1,4):
+                # to differentiate between sender and target nodes
+                if f"Node{node}" != node_name: 
+                    skt.sendto(msg, (f"Node{node}", 5555))
+                    print(f"HEARTBEAT TO Node{node} SENT!")
+            print(f"GONNA SLEEP FOR {hb_interval} secs")
+            time.sleep(hb_interval)
 
 def listener(skt):
     print(f'Listening for messages... ')
@@ -59,9 +69,9 @@ def requestVoteRPC(skt, key=0, value=0):
     os.environ["current_term"] = str(int(os.environ.get("current_term"))+1)
     msg = makeMessage("VOTE_REQUEST")
     for node in range(1, num_of_nodes+1):
-        if f"node{node}" != node_name:
-            skt.sendto(msg, (f"node{node}", 5006))
-            print(f"VOTE_REQUEST sent to node{node} !")
+        if f"Node{node}" != node_name:
+            skt.sendto(msg, (f"Node{node}", 5555))
+            print(f"VOTE_REQUEST sent to Node{node} !")
     print("I also voted for myself.")
     os.environ["voted"] = "1"
 
@@ -70,7 +80,7 @@ def voteMessageSend(skt, incoming_RPC_msg):
     print("Voting Params: Curent Term, IncomingRPC Term , Voted(0/1) :",os.environ.get('current_term'), " ", incoming_RPC_msg["term"]," ", os.environ.get("voted"))
     if (os.environ.get('current_term') < incoming_RPC_msg["term"]) and (os.environ.get("voted") == "0"):
         msg = makeMessage("VOTE_ACK")
-        skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5006))
+        skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
         os.environ["voted"] = "1"
         print("VOTE SENT")
 
@@ -144,6 +154,33 @@ def resetTimerE(skt, key=0,val=0, hb_timeout=7):
     createTimerE(skt, key, val, hb_timeout)
     tE.start()
 
+# Controller request function
+def convert_to_follower():
+    print("converting to follower on controller request")
+    os.environ["STATE"] = "follower"
+    print("my current state is : ", os.environ["STATE"])
+
+def send_leader_info(skt):
+    msg = makeMessage("LEADER_INFO","LEADER",os.environ.get("LEADER_ID"))
+    target = "Controller"
+    port = 5555
+    try:
+        # Encoding and sending the message
+        skt.sendto(msg, (target, port))
+        print("leader info sent to controller")
+    except:
+	    # socket.gaierror: [Errno -3] would be thrown if target IP container does not exist or exits, write your listener
+        print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
+        pass
+
+def intant_timeout():
+	tE.cancel()
+	tV.cancel()
+	hb_timeout_function(pulse_sending_socket)
+
+def initiate_node_shutdown():
+    os.environ["SHUTDOWN_FLAG"] = "1"
+    sys.exit()
 
 def normalRecv(skt): # Common Recv
     
@@ -189,6 +226,24 @@ def normalRecv(skt): # Common Recv
                 os.environ["voted"] = "1"
 
                 os.environ["LEADER_ID"] = os.environ.get("NODEID")
+        
+        ## controller message processing
+        if decoded_msg["request"] == "CONVERT_FOLLOWER" and decoded_msg["sender_name"] == "Controller":
+            convert_to_follower()
+	    
+        if decoded_msg["request"] == "TIMEOUT" and decoded_msg["sender_name"] == "Controller":
+            intant_timeout()
+
+        if decoded_msg["request"] == "SHUTDOWN" and decoded_msg["sender_name"] == "Controller":
+            initiate_node_shutdown()
+
+        if decoded_msg["request"] == "LEADER_INFO" and decoded_msg["sender_name"] == "Controller":
+            send_leader_info(pulse_sending_socket)
+        
+       
+
+        
+
         
 
         # while os.environ.get("STATE")== "follower":
@@ -249,9 +304,9 @@ def index():
         lead = os.environ.get('LEADER')
         if  lead == '1':
             files= {"name": (None,record_name) , "hash": (None,record_hash)}
-            url1 = 'http://node2:5000/'
+            url1 = 'http://Node2:5000/'
             log1 = requests.post(url1,  files =files)
-            url2 = 'http://node3:5000/'
+            url2 = 'http://Node3:5000/'
             log2 = requests.post(url2, files =files)
         else:
             print('NOT LEADER-------------------')
@@ -274,9 +329,9 @@ def delete(id):
     lead = os.environ.get('LEADER')
     if  lead == '1': 
         for node in range(2,4):
-            url = f"http://node{node}:5000/delete/{id}"
+            url = f"http://Node{node}:5000/delete/{id}"
             log = requests.get(url)
-            print(f"SENT to delete GET to node{node}")
+            print(f"SENT to delete GET to Node{node}")
             print(log)
     else:
         print('NOT LEADER-------------------')
@@ -299,14 +354,14 @@ def update(id):
             record.name = request.form['name']
             record_name = request.form['name']
             for node in range(2,4):
-                url = f"http://node{node}:5000//update/{id}"
+                url = f"http://Node{node}:5000//update/{id}"
                 get_log = requests.get(url)
-                print(f"SENT to update GET to node{node}")
+                print(f"SENT to update GET to Node{node}")
                 print(get_log)
                 
                 files= {"name": (None,record_name)}
                 post_log = requests.post(url,  files =files)
-                print(f"SENT to update POST to node{node}")
+                print(f"SENT to update POST to Node{node}")
                 print(post_log)
             
             try:
@@ -348,16 +403,22 @@ if __name__ == "__main__":
     pulse_sending_socket.bind((node_name, 5005))
 
     pulse_listening_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
-    pulse_listening_socket.bind((node_name, 5006))
+    pulse_listening_socket.bind((node_name, 5555))
     
     # #Starting thread 1
     # change signature heartbeatSend
-    threading.Thread(target=heartBeatSend, args=[pulse_sending_socket, 20]).start() 
+    send_thread = threading.Thread(target=heartBeatSend, args=[pulse_sending_socket, 20])
+    send_thread.start() 
 
     #Starting thread 2
     # change signature heartbeatRecv
-    threading.Thread(target=normalRecv, args= [pulse_listening_socket]).start()
+    receive_thread = threading.Thread(target=normalRecv, args= [pulse_listening_socket])
+    receive_thread.start()
 
-    # lambda runs app.run within a function. Function passed to thread
+
+
+    # send_thread.join()
+    # receive_thread.join()
+    # # lambda runs app.run within a function. Function passed to thread
     # threading.Thread(target=lambda: app.run(debug=False, host ='0.0.0.0', port=5000, use_reloader=False)).start()
 
