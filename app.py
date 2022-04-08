@@ -13,7 +13,7 @@ import threading
 from threading import *
 from sqlalchemy import false
 import sys
-
+from random import randint
 
 app =  Flask(__name__)
 
@@ -45,11 +45,19 @@ def heartBeatSend(skt, hb_interval = 10):
             
             print('Sending HeartBeat...')
             msg = makeMessage("APPEND_RPC")
-            for node in range(1,4):
+            active_node_count = num_of_nodes
+            for node in range(1,num_of_nodes+1):
+                print(active_node_count)
                 # to differentiate between sender and target nodes
                 if f"Node{node}" != node_name: 
-                    skt.sendto(msg, (f"Node{node}", 5555))
-                    print(f"HEARTBEAT TO Node{node} SENT!")
+                    try:
+                        skt.sendto(msg, (f"Node{node}", 5555))
+                        print(f"HEARTBEAT TO Node{node} SENT!")
+                    except:
+                        print(f"Node{node} not reachable")
+                        active_node_count =  active_node_count -1
+
+            os.environ["ACTIVE_NODES"] = str(active_node_count)
             print(f"GONNA SLEEP FOR {hb_interval} secs")
             time.sleep(hb_interval)
 
@@ -68,10 +76,16 @@ def requestVoteRPC(skt, key=0, value=0):
     os.environ["STATE"] = "candidate"
     os.environ["current_term"] = str(int(os.environ.get("current_term"))+1)
     msg = makeMessage("VOTE_REQUEST")
+    active_node_count = num_of_nodes
     for node in range(1, num_of_nodes+1):
         if f"Node{node}" != node_name:
-            skt.sendto(msg, (f"Node{node}", 5555))
-            print(f"VOTE_REQUEST sent to Node{node} !")
+            try:
+                skt.sendto(msg, (f"Node{node}", 5555))
+                print(f"VOTE_REQUEST sent to Node{node} !")
+            except:
+                print(f"Node{node} not reachable")
+                active_node_count = active_node_count -1
+    os.environ["ACTIVE_NODES"] = str(active_node_count)
     print("I also voted for myself.")
     os.environ["voted"] = "1"
 
@@ -79,40 +93,15 @@ def voteMessageSend(skt, incoming_RPC_msg):
     # if followers term is less than request term and not voted yet grant vote
     print("Voting Params: Curent Term, IncomingRPC Term , Voted(0/1) :",os.environ.get('current_term'), " ", incoming_RPC_msg["term"]," ", os.environ.get("voted"))
     if (os.environ.get('current_term') < incoming_RPC_msg["term"]) and (os.environ.get("voted") == "0"):
+        
+        # if(os.environ.get('STATE')=="leader"):
+        #     # Convert old leader to follower
+        #     os.environ["STATE"] = "follower"
+
         msg = makeMessage("VOTE_ACK")
         skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
         os.environ["voted"] = "1"
         print("VOTE SENT")
-
-# def requestVoteACK(skt, key=0, value=0):
-#     print(f"RequestVoteACK listening ... Will keep listening until majority or until timeout")
-#     vote_count=1
-#     while True:
-#         while ((vote_count<(num_of_nodes/2)) and (os.environ.get("STATE")== "candidate")): 
-#             print("Num of Votes =",vote_count)
-#             decoded_msg = listener_wrapper(skt, 200)
-
-#             # RPC break condition
-#             if (decoded_msg["request"] == "APPEND_RPC"):
-#                 os.environ["STATE"] = "follower"
-#                 os.environ["LEADER_ID"] = decoded_msg["sender_name"]    
-#                 vote_count = -1 
-#                 break
-            
-#             # RPC Voteback condition
-#             if (decoded_msg["request"] == "VOTE_ACK"):
-#                 # decode vote message if you add negative ACK
-#                 print("GOT A VOTE! votecount now ", vote_count+1)
-#                 vote_count+=1
-#                 continue
-            
-#             # RPC VOTE_REQUEST condition
-#             if (decoded_msg["request"] == "VOTE_REQUEST"):
-#                 voteMessageSend(pulse_sending_socket, decoded_msg)
-#                 continue
-            
-#         return vote_count       
-# ==============================================
 
 def vote_timeout_function(skt, key=0,val=0):
     # do re-election
@@ -137,7 +126,9 @@ def resetTimerV(skt, key=0,val=0,vote_timeout=7):
 # =========================
 
 def hb_timeout_function(skt, key=0,val=0):
+    print("HB TIMEOUT! Will check if I am a follower ...")
     if(os.environ.get("STATE")=="follower"):
+        print("I am a follower ... Gonna start my candidacy !")
         requestVoteRPC(skt,key,val)
         startTimerV()
 # Timer E Class Stand in
@@ -179,20 +170,29 @@ def intant_timeout():
 	hb_timeout_function(pulse_sending_socket)
 
 def initiate_node_shutdown():
+
     os.environ["SHUTDOWN_FLAG"] = "1"
     sys.exit()
 
 def normalRecv(skt): # Common Recv
     
+    hb_timeout = randint (10,15)
+    
+    # hb_timeout = 6
+
+    print("Heartbeat timeout generated randomly = ", hb_timeout)
+
     vote_count = 0
-    createTimerE(skt, key=0,val=0,hb_timeout=10)
+    createTimerE(skt, 0, 0, hb_timeout)
     createTimerV(skt, key=0,val=0,vote_timeout=15)
     startTimerE()
     
     while True:
+        global num_of_nodes
+        print(os.environ.get("ACTIVE_NODES")," nodes are active!") 
         decoded_msg = listener(skt)
         print("GOT A message here m8!",decoded_msg)
-        
+         
         if (decoded_msg["request"]== "APPEND_RPC") and (os.environ.get("STATE")=="follower"): 
             print("HB RECV---")
             resetTimerE(pulse_sending_socket, 0, 0, 7)
@@ -209,17 +209,17 @@ def normalRecv(skt): # Common Recv
             createTimerV(skt, key=0,val=0,vote_timeout=7)
             
             os.environ["STATE"] = "follower"
-            os.environ["LEADER_ID"] = decoded_msg["sender_name"]    
+            os.environ["LEADER_ID"] = decoded_msg["sender_name"] 
             vote_count = 0
             os.environ["voted"] = "0"
         
         if (decoded_msg["request"]== "VOTE_ACK") and (os.environ.get("STATE")=="candidate"):
-            print("VOTE RECV ---")
             vote_count+=1
-
-            print("VOTECOUT = "," VOTES NEEDED IS ",)
+            num_active_nodes = int(os.environ.get("ACTIVE_NODES"))
+            print("VOTE RECV --- CURRENT VOTE COUNT:", vote_count + 1 , " ToT VOTES REQUIRED :", ((num_active_nodes-1)//2) + 1)
+            
             # if majority
-            if (vote_count>=((num_of_nodes-1)//2)): # n-1 /2  because the node always votes for itself
+            if (vote_count>=((num_active_nodes-1)//2)): # n-1 /2  because the node always votes for itself
                 print("NEW LEADER =============")
                 tV.cancel() # cancel reelection
                 os.environ["STATE"] = "leader"
@@ -235,53 +235,12 @@ def normalRecv(skt): # Common Recv
             intant_timeout()
 
         if decoded_msg["request"] == "SHUTDOWN" and decoded_msg["sender_name"] == "Controller":
+            tE.cancel()
+            tV.cancel()
             initiate_node_shutdown()
 
         if decoded_msg["request"] == "LEADER_INFO" and decoded_msg["sender_name"] == "Controller":
             send_leader_info(pulse_sending_socket)
-        
-       
-
-        
-
-        
-
-        # while os.environ.get("STATE")== "follower":
-        #     print("I am a follower")
-        #     try:
-        #         # print("inside HBR follower loop after try")
-        #         decoded_msg = listener_wrapper(skt, 5)
-        #         print("GOT A message here m8!",decoded_msg)
-                
-        #         # HeartbeatRecv Condition
-        #         if (decoded_msg["request"] == "APPEND_RPC"):
-        #             print("RECIVED APPEND_RPC")    
-        #             os.environ["LEADER_ID"] = decoded_msg["sender_name"]   
-        #             print("Who is the leader?", os.environ.get("LEADER_ID"))
-
-        #         # RPC VOTE_REQUEST condition
-        #         if (decoded_msg["request"] == "VOTE_REQUEST"):
-        #             print("Got an voteRPC from ", decoded_msg["sender_name"])    
-        #             voteMessageSend(pulse_sending_socket, decoded_msg)
-        #             break
-            
-        #     except timeout_decorator.TimeoutError:
-        #         print("ELECTION TIMEOUT!!!!!")
-        #         requestVoteRPC(skt) # Changes state to candidate and sends out RPC
-        #         break
-
-        # while os.environ.get("STATE")== "candidate":
-        #     print("In candidate state")
-
-        #     # mirror the time argument for receivevite_ACK
-        #     try:
-        #         print("Waiting for the votes to come in ...")
-
-        #         requestVoteACK_wrapper(skt, 30)
-        #     except timeout_decorator.TimeoutError:
-        #         print("VOTE WAITING TIMEOUT")
-        #         break
-            # store decoded_msg to logs
         
 
 class Person(db.Model):
@@ -395,8 +354,9 @@ if __name__ == "__main__":
 
     node_name = os.environ.get('NODEID')
     print(node_name)
-
+    global num_of_nodes
     num_of_nodes = 3
+    os.environ["ACTIVE_NODES"] = str(num_of_nodes)
     global pulse_sending_socket
     global pulse_listening_socket
     pulse_sending_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
@@ -407,7 +367,7 @@ if __name__ == "__main__":
     
     # #Starting thread 1
     # change signature heartbeatSend
-    send_thread = threading.Thread(target=heartBeatSend, args=[pulse_sending_socket, 20])
+    send_thread = threading.Thread(target=heartBeatSend, args=[pulse_sending_socket, 4])
     send_thread.start() 
 
     #Starting thread 2
