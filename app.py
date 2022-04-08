@@ -23,7 +23,7 @@ db = SQLAlchemy(app)
 
 
 ## creating a module to generate message based on request type 
-def makeMessage(request_type:str, key = 0, value = 0):
+def makeMessage(request_type:str, key, value):
     print('Making message...')    
     pulse_msg = {
         "sender_name" : os.environ.get('NODEID'), 
@@ -44,7 +44,7 @@ def heartBeatSend(skt, hb_interval = 10):
                 sys.exit()
             
             print('Sending HeartBeat...')
-            msg = makeMessage("APPEND_RPC")
+            msg = makeMessage("APPEND_RPC", "", "")
             active_node_count = num_of_nodes
             for node in range(1,num_of_nodes+1):
                 # to differentiate between sender and target nodes
@@ -75,7 +75,7 @@ def listener(skt):
 def requestVoteRPC(skt, key=0, value=0):
     os.environ["STATE"] = "candidate"
     os.environ["current_term"] = str(int(os.environ.get("current_term"))+1)
-    msg = makeMessage("VOTE_REQUEST")
+    msg = makeMessage("VOTE_REQUEST", "","")
     active_node_count = num_of_nodes
     for node in range(1, num_of_nodes+1):
         if f"Node{node}" != node_name:
@@ -94,11 +94,11 @@ def voteMessageSend(skt, incoming_RPC_msg):
     print("Voting Params: Curent Term, IncomingRPC Term , Voted(0/1) :",os.environ.get('current_term'), " ", incoming_RPC_msg["term"]," ", os.environ.get("voted"))
     if (os.environ.get('current_term') < incoming_RPC_msg["term"]) and (os.environ.get("voted") == "0"):
         
-        # if(os.environ.get('STATE')=="leader"):
-        #     # Convert old leader to follower
-        #     os.environ["STATE"] = "follower"
+        if(os.environ.get('STATE')=="leader"):
+            # Convert old leader to follower
+            os.environ["STATE"] = "follower"
 
-        msg = makeMessage("VOTE_ACK")
+        msg = makeMessage("VOTE_ACK", "", "")
         skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
         os.environ["voted"] = "1"
         print("VOTE SENT")
@@ -152,7 +152,7 @@ def convert_to_follower():
     print("my current state is : ", os.environ["STATE"])
 
 def send_leader_info(skt):
-    msg = makeMessage("LEADER_INFO","LEADER",os.environ.get("LEADER_ID"))
+    msg = makeMessage("LEADER_INFO","LEADER",os.environ.get("LEADER_ID")    )
     target = "Controller"
     port = 5555
     try:
@@ -164,7 +164,7 @@ def send_leader_info(skt):
         print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
         pass
 
-def intant_timeout():
+def instant_timeout():
 	tE.cancel()
 	tV.cancel()
 	hb_timeout_function(pulse_sending_socket)
@@ -231,7 +231,7 @@ def normalRecv(skt): # Common Recv
             convert_to_follower()
 	    
         if decoded_msg["request"] == "TIMEOUT" and decoded_msg["sender_name"] == "Controller":
-            intant_timeout()
+            instant_timeout()
 
         if decoded_msg["request"] == "SHUTDOWN" and decoded_msg["sender_name"] == "Controller":
             tE.cancel()
