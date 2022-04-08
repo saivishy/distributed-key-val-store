@@ -21,7 +21,7 @@ services:
   - PYTHONUNBUFFERED=1
   - NODEID=node1
   - current_term=1
-  - voted=0
+  - voted=1
 
  web2:
   build:
