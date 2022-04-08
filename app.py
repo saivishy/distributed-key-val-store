@@ -158,7 +158,7 @@ def normalRecv(skt): # Common Recv
         
         if (decoded_msg["request"]== "APPEND_RPC") and (os.environ.get("STATE")=="follower"): 
             print("HB RECV---")
-            resetTimerE(pulse_sending_socket, 0, 0, 7)
+            resetTimerE(pulse_sending_socket, 0, 0, 10)
         
         if (decoded_msg["request"] == "VOTE_REQUEST"):
             print("RPC RECV---")
@@ -167,9 +167,9 @@ def normalRecv(skt): # Common Recv
         if (decoded_msg["request"]== "APPEND_RPC") and (os.environ.get("STATE")=="candidate"):
             print("HB RECV --- CHANGE BACK TO FOLLOWER ---")
             
-            resetTimerE(pulse_sending_socket, 0, 0, 7)
+            resetTimerE(pulse_sending_socket, 0, 0, 10)
             tV.cancel()
-            createTimerV(skt, key=0,val=0,vote_timeout=7)
+            createTimerV(skt, key=0,val=0,vote_timeout=10)
             
             os.environ["STATE"] = "follower"
             os.environ["LEADER_ID"] = decoded_msg["sender_name"]    
@@ -190,45 +190,6 @@ def normalRecv(skt): # Common Recv
 
                 os.environ["LEADER_ID"] = os.environ.get("NODEID")
         
-
-        # while os.environ.get("STATE")== "follower":
-        #     print("I am a follower")
-        #     try:
-        #         # print("inside HBR follower loop after try")
-        #         decoded_msg = listener_wrapper(skt, 5)
-        #         print("GOT A message here m8!",decoded_msg)
-                
-        #         # HeartbeatRecv Condition
-        #         if (decoded_msg["request"] == "APPEND_RPC"):
-        #             print("RECIVED APPEND_RPC")    
-        #             os.environ["LEADER_ID"] = decoded_msg["sender_name"]   
-        #             print("Who is the leader?", os.environ.get("LEADER_ID"))
-
-        #         # RPC VOTE_REQUEST condition
-        #         if (decoded_msg["request"] == "VOTE_REQUEST"):
-        #             print("Got an voteRPC from ", decoded_msg["sender_name"])    
-        #             voteMessageSend(pulse_sending_socket, decoded_msg)
-        #             break
-            
-        #     except timeout_decorator.TimeoutError:
-        #         print("ELECTION TIMEOUT!!!!!")
-        #         requestVoteRPC(skt) # Changes state to candidate and sends out RPC
-        #         break
-
-        # while os.environ.get("STATE")== "candidate":
-        #     print("In candidate state")
-
-        #     # mirror the time argument for receivevite_ACK
-        #     try:
-        #         print("Waiting for the votes to come in ...")
-
-        #         requestVoteACK_wrapper(skt, 30)
-        #     except timeout_decorator.TimeoutError:
-        #         print("VOTE WAITING TIMEOUT")
-        #         break
-            # store decoded_msg to logs
-        
-
 class Person(db.Model):
     id = db.Column(db.Integer, primary_key= True)
     name = db.Column(db.String(200), nullable = False)
@@ -352,7 +313,7 @@ if __name__ == "__main__":
     
     # #Starting thread 1
     # change signature heartbeatSend
-    threading.Thread(target=heartBeatSend, args=[pulse_sending_socket, 20]).start() 
+    threading.Thread(target=heartBeatSend, args=[pulse_sending_socket, 4]).start() 
 
     #Starting thread 2
     # change signature heartbeatRecv
