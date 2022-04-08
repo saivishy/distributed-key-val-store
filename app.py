@@ -88,6 +88,7 @@ def requestVoteRPC(skt, key=0, value=0):
     os.environ["ACTIVE_NODES"] = str(active_node_count)
     print("I also voted for myself.")
     os.environ["voted"] = "1"
+    os.environ["voted_for"] = os.environ.get("NODEID")
 
 def voteMessageSend(skt, incoming_RPC_msg):
     # if followers term is less than request term and not voted yet grant vote
@@ -101,6 +102,7 @@ def voteMessageSend(skt, incoming_RPC_msg):
         msg = makeMessage("VOTE_ACK", "", "")
         skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
         os.environ["voted"] = "1"
+        os.environ["voted_for"] = incoming_RPC_msg["sender_name"]
         print("VOTE SENT")
 
 def vote_timeout_function(skt, key=0,val=0):
@@ -194,6 +196,7 @@ def normalRecv(skt): # Common Recv
          
         if (decoded_msg["request"]== "APPEND_RPC") and (os.environ.get("STATE")=="follower"): 
             print("HB RECV---")
+            os.environ["LEADER_ID"] = decoded_msg["sender_name"]
             resetTimerE(pulse_sending_socket, 0, 0, 7)
         
         if (decoded_msg["request"] == "VOTE_REQUEST"):
@@ -208,7 +211,8 @@ def normalRecv(skt): # Common Recv
             createTimerV(skt, key=0,val=0,vote_timeout=7)
             
             os.environ["STATE"] = "follower"
-            os.environ["LEADER_ID"] = decoded_msg["sender_name"] 
+            os.environ["LEADER_ID"] = decoded_msg["sender_name"]
+            os.environ["current_term"] = decoded_msg["term"]
             vote_count = 0
             os.environ["voted"] = "0"
         
@@ -354,7 +358,7 @@ if __name__ == "__main__":
     node_name = os.environ.get('NODEID')
     print(node_name)
     global num_of_nodes
-    num_of_nodes = 3
+    num_of_nodes = 5
     os.environ["ACTIVE_NODES"] = str(num_of_nodes)
     global pulse_sending_socket
     global pulse_listening_socket
