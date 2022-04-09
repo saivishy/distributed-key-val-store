@@ -93,11 +93,15 @@ def requestVoteRPC(skt, key=0, value=0):
 def voteMessageSend(skt, incoming_RPC_msg):
     # if followers term is less than request term and not voted yet grant vote
     print("Voting Params: Curent Term, IncomingRPC Term , Voted(0/1) :",os.environ.get('current_term'), " ", incoming_RPC_msg["term"]," ", os.environ.get("voted"))
-    if (os.environ.get('current_term') < incoming_RPC_msg["term"]) and (os.environ.get("voted") == "0"):
+    if (os.environ.get('current_term') < incoming_RPC_msg["term"]): # and (os.environ.get("voted") == "0")
         
-        if(os.environ.get('STATE')=="leader"):
-            # Convert old leader to follower
-            os.environ["STATE"] = "follower"
+        if(os.environ.get('STATE')=="candidate"):
+            tV.cancel()
+            
+        # Convert to follower
+        os.environ["STATE"] = "follower"
+        
+        
 
         msg = makeMessage("VOTE_ACK", "", "")
         skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
@@ -107,9 +111,12 @@ def voteMessageSend(skt, incoming_RPC_msg):
 
 def vote_timeout_function(skt, key=0,val=0):
     # do re-election
+    print("REELECTION STARTED")
+    os.environ["voted"] = "0"
+
     if(os.environ.get("STATE")=="candidate"):
         requestVoteRPC(skt, key, val)
-        resetTimerV(skt, key,val, 15) # HARD CODED REELECTION TIME FIX LATER
+        resetTimerV(skt, key,val, hb_timeout) # HARD CODED REELECTION TIME FIX LATER
 # Timer V Class Stand in
     
 
@@ -132,7 +139,7 @@ def hb_timeout_function(skt, key=0,val=0):
     if(os.environ.get("STATE")=="follower"):
         print("I am a follower ... Gonna start my candidacy !")
         requestVoteRPC(skt,key,val)
-        startTimerV()
+        resetTimerV(skt,key,val,hb_timeout)
 # Timer E Class Stand in
 
 def createTimerE(skt, key=0,val=0, hb_timeout=7):
@@ -177,8 +184,8 @@ def initiate_node_shutdown():
     sys.exit()
 
 def normalRecv(skt): # Common Recv
-    
-    hb_timeout = randint (10,15)
+    global hb_timeout
+    hb_timeout = randint (10,20)
     
     # hb_timeout = 6
 
@@ -186,7 +193,7 @@ def normalRecv(skt): # Common Recv
 
     vote_count = 0
     createTimerE(skt, 0, 0, hb_timeout)
-    createTimerV(skt, key=0,val=0,vote_timeout=15)
+    createTimerV(skt, key=0,val=0,vote_timeout=hb_timeout)
     startTimerE()
     
     while True:
@@ -197,19 +204,19 @@ def normalRecv(skt): # Common Recv
         if (decoded_msg["request"]== "APPEND_RPC") and (os.environ.get("STATE")=="follower"): 
             print("HB RECV---")
             os.environ["LEADER_ID"] = decoded_msg["sender_name"]
-            resetTimerE(pulse_sending_socket, 0, 0, 7)
+            resetTimerE(pulse_sending_socket, 0, 0, hb_timeout)
         
         if (decoded_msg["request"] == "VOTE_REQUEST"):
-            print("RPC RECV---")
+            print("VOTE RPC RECV---")
             voteMessageSend(pulse_sending_socket, decoded_msg)
         
         if (decoded_msg["request"]== "APPEND_RPC") and (os.environ.get("STATE")=="candidate"):
             print("HB RECV --- CHANGE BACK TO FOLLOWER ---")
             
-            resetTimerE(pulse_sending_socket, 0, 0, 7)
+            resetTimerE(pulse_sending_socket, 0, 0, hb_timeout)
             tV.cancel()
-            createTimerV(skt, key=0,val=0,vote_timeout=7)
-            
+            createTimerV(skt, key=0,val=0,vote_timeout=10)
+            resetTimerE(pulse_sending_socket, 0, 0, hb_timeout)
             os.environ["STATE"] = "follower"
             os.environ["LEADER_ID"] = decoded_msg["sender_name"]
             os.environ["current_term"] = decoded_msg["term"]
@@ -226,7 +233,7 @@ def normalRecv(skt): # Common Recv
                 print("NEW LEADER =============")
                 tV.cancel() # cancel reelection
                 os.environ["STATE"] = "leader"
-                os.environ["voted"] = "1"
+                os.environ["voted"] = "0"
 
                 os.environ["LEADER_ID"] = os.environ.get("NODEID")
         
