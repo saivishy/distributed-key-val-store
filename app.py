@@ -21,6 +21,24 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.environ.get('DATABASE_FI
 
 db = SQLAlchemy(app)
 
+def getNodeInfo():
+    global hb_timeout
+    global hb_send_interval
+    sav_dict = {
+        "currentTerm" : os.environ.get('current_term'),
+        "votedFor": os.environ.get('voted_for'),
+        "log": "[]", 
+        "timeoutInterval": hb_timeout,
+        "heartBeatInterval": hb_send_interval  
+    }
+
+    json_obj = json.dumps(sav_dict, indent=4)
+
+    return json_obj
+
+def saveObj(obj,filename):
+    with open(f"node_info/{filename}_info.json", "w") as f:
+        f.write(obj)
 
 ## creating a module to generate message based on request type 
 def makeMessage(request_type:str, key, value):
@@ -59,6 +77,10 @@ def heartBeatSend(skt, hb_interval = 10):
             os.environ["ACTIVE_NODES"] = str(active_node_count)
             print(active_node_count," nodes are active! ")
             print(f"GONNA SLEEP FOR {hb_interval} secs")
+
+            node_info = getNodeInfo()
+            saveObj(node_info, os.environ.get("NODEID"))
+            
             time.sleep(hb_interval)
 
 def listener(skt):
@@ -205,6 +227,8 @@ def normalRecv(skt): # Common Recv
             print("HB RECV---")
             os.environ["LEADER_ID"] = decoded_msg["sender_name"]
             resetTimerE(pulse_sending_socket, 0, 0, hb_timeout)
+            node_info = getNodeInfo()
+            saveObj(node_info, os.environ.get("NODEID"))
         
         if (decoded_msg["request"] == "VOTE_REQUEST"):
             print("VOTE RPC RECV---")
@@ -361,7 +385,8 @@ def update(id):
 
 
 if __name__ == "__main__":
-
+    global hb_send_interval
+    hb_send_interval = 4
     node_name = os.environ.get('NODEID')
     print(node_name)
     global num_of_nodes
@@ -377,7 +402,7 @@ if __name__ == "__main__":
     
     # #Starting thread 1
     # change signature heartbeatSend
-    send_thread = threading.Thread(target=heartBeatSend, args=[pulse_sending_socket, 4])
+    send_thread = threading.Thread(target=heartBeatSend, args=[pulse_sending_socket, hb_send_interval])
     send_thread.start() 
 
     #Starting thread 2
