@@ -6,6 +6,13 @@ import traceback
 import time
 
 
+def sock_bind():
+    # Socket creation and binding
+    global skt
+    skt = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+    skt.bind((sender, port))
+
+
 def listener(skt):
     print(f'Listening for messages... ')
 
@@ -19,107 +26,53 @@ def listener(skt):
         return decoded_msg
 
 
-
 if __name__ == "__main__":
-    time.sleep(30)
     # Load message template
     msg = json.load(open("Message.json"))
 
     # initialize
     sender = "Controller"
-    # port=int(input("give port number"))
     port = 5555
 
-    # Socket creation and binding
-    skt = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
-    skt.bind((sender, port))
+    create_socket = str(input("create socket? (Y/N)"))
 
-    request_target_node = "Node4" #str(input("Select which node to target. Press numbers from 1-5 to select from Node1-Node5 respectively \n"))
+    if create_socket == "Y" or create_socket =="y":
+        sock_bind()
+        global skt
+    else:
+        sys.exit()
 
-    msg['sender_name'] = sender
-    msg['request']="LEADER_INFO"
-
+    while True:
+        request_input = str(input("Select request to send: \n Press 1 for CONVERT_FOLLOWER \n Press 2 for TIMEOUT \n Press 3 for SHUTDOWN \n Press 4 for LEADER_INFO \n Press 5 for ALL_INFO \n Press anything else to exit \n"))
+        request_target_node = str(input("Select which node to target. Press numbers from 1-5 to select from Node1-Node5 respectively \n"))
     
-    try:
-        # Encoding and sending the message
-        skt.sendto(json.dumps(msg).encode('utf-8'), (request_target_node, port))
-        print(f"{msg['request']} sent to {request_target_node} \n")
-
-        print(f"Waiting for reply from {request_target_node}\n")
-        reply =  listener(skt)
-        print(f"Leader info received {reply['sender_name']} : {reply}")
+        msg['sender_name'] = sender
+    
+        if request_input == "1":
+            msg['request']="CONVERT_FOLLOWER"
+        elif request_input == "2":
+            msg['request']="TIMEOUT"
+        elif request_input == "3":
+            msg['request']="SHUTDOWN"
+        elif request_input == "4":
+            msg['request']="LEADER_INFO"
+        elif request_input == "5":
+            msg['request']="ALL_INFO"   
+        else:
+            break
         
-    except:
-    #  socket.gaierror: [Errno -3] would be thrown if target IP container does not exist or exits, write your listener
-        print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
+        try:
+            # Encoding and sending the message
+            skt.sendto(json.dumps(msg).encode('utf-8'), (f"Node{request_target_node}", port))
+            print(f"{msg['request']} sent to Node{request_target_node} \n")
 
-    
-
-    
-
-    # retargeting leader for conversion to follower
-    msg['request']="CONVERT_FOLLOWER"
-    
-    request_target_node = reply['value']
-    
-    
-    try:
-        # Encoding and sending the message
-        skt.sendto(json.dumps(msg).encode('utf-8'), (request_target_node, port))
-        print(f"{msg['request']} sent to Node{request_target_node} \n")
-
-        # print(f"Waiting for reply from Node{request_target_node}\n")
-        # reply =  listener(skt)
-        # print(f"Leader info received from {reply['sender_name']} : {reply}")
-        
-    except:
-    #  socket.gaierror: [Errno -3] would be thrown if target IP container does not exist or exits, write your listener
-        print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
-
-
-    time.sleep(20)
-
-    
-    # timeout the converted follower
-
-    msg['request']="TIMEOUT"
-    
-    try:
-        # Encoding and sending the message
-        skt.sendto(json.dumps(msg).encode('utf-8'), (request_target_node, port))
-        print(f"{msg['request']} sent to Node{request_target_node} \n")
-
-        # print(f"Waiting for reply from Node{request_target_node}\n")
-        # reply =  listener(skt)
-        # print(f"Leader info received from {reply['sender_name']} : {reply}")
-        
-    except:
-    #  socket.gaierror: [Errno -3] would be thrown if target IP container does not exist or exits, write your listener
-        print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
-
-
-    time.sleep(15)
-
-    msg['request']="SHUTDOWN"
-    
-    try:
-        # Encoding and sending the message
-        skt.sendto(json.dumps(msg).encode('utf-8'), (request_target_node, port))
-        print(f"{msg['request']} sent to Node{request_target_node} \n")
-
-        # print(f"Waiting for reply from Node{request_target_node}\n")
-        # reply =  listener(skt)
-        # print(f"Leader info received from {reply['sender_name']} : {reply}")
-        
-    except:
-    #  socket.gaierror: [Errno -3] would be thrown if target IP container does not exist or exits, write your listener
-        print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
-
-
-
-
-
-
-
+            if request_input =="4" or request_input == "5":
+                print(f"Waiting for reply from Node{request_target_node}\n")
+                reply =  listener(skt)
+                print(reply)
+            
+        except:
+        #  socket.gaierror: [Errno -3] would be thrown if target IP container does not exist or exits, write your listener
+            print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
 
         

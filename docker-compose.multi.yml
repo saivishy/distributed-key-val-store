@@ -13,13 +13,14 @@ services:
   - .\:/app
   environment:
   - DATABASE_FILENAME=test1.db
-  - STATE=leader 
+  - STATE=follower 
   - LEADER_ID=Node1
   - LEADER=1
   - PYTHONUNBUFFERED=1
   - NODEID=Node1
   - current_term=1
   - voted=1
+  - voted_for
   - SHUTDOWN_FLAG=0
   - ACTIVE_NODES=0
 
@@ -42,6 +43,7 @@ services:
   - NODEID=Node2
   - current_term=1
   - voted=0
+  - voted_for
   - SHUTDOWN_FLAG=0
   - ACTIVE_NODES=0
 
@@ -64,6 +66,7 @@ services:
   - NODEID=Node3
   - current_term=1
   - voted=0
+  - voted_for
   - SHUTDOWN_FLAG=0
   - ACTIVE_NODES=0
 
@@ -86,6 +89,7 @@ services:
   - NODEID=Node4
   - current_term=1
   - voted=0
+  - voted_for
   - SHUTDOWN_FLAG=0
   - ACTIVE_NODES=0
 
@@ -108,6 +112,7 @@ services:
   - NODEID=Node5
   - current_term=1
   - voted=0
+  - voted_for
   - SHUTDOWN_FLAG=0
   - ACTIVE_NODES=0
 

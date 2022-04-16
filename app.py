@@ -13,7 +13,7 @@ import threading
 from threading import *
 from sqlalchemy import false
 import sys
-from random import randint
+from random import *
 
 app =  Flask(__name__)
 
@@ -37,7 +37,7 @@ def getNodeInfo():
     return json_obj
 
 def saveObj(obj,filename):
-    with open(f"node_info/{filename}_info.json", "w") as f:
+    with open(f"{filename}_info.json", "w") as f:
         f.write(obj)
 
 ## creating a module to generate message based on request type 
@@ -195,6 +195,25 @@ def send_leader_info(skt):
         print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
         pass
 
+def send_all_info(skt):
+    val_load = {
+        "leader" : os.environ.get('LEADER_ID'), 
+        "current_term" : os.environ.get('current_term'),
+        "voted_for": os.environ.get('voted_for')
+        }
+    msg = makeMessage("ALL_INFO","ENV_VAR",json.dumps(val_load))
+    target = "Controller"
+    port = 5555
+    try:
+        # Encoding and sending the message
+        skt.sendto(msg, (target, port))
+        print("leader info sent to controller")
+    except:
+	    # socket.gaierror: [Errno -3] would be thrown if target IP container does not exist or exits, write your listener
+        print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
+        pass
+
+
 def instant_timeout():
 	tE.cancel()
 	tV.cancel()
@@ -207,8 +226,9 @@ def initiate_node_shutdown():
 
 def normalRecv(skt): # Common Recv
     global hb_timeout
-    hb_timeout = randint (10,20)
+    hb_timeout = randint (12,20)
     
+    # hb_timeout = round(random.uniform(0.30, 0.50), 2)
     # hb_timeout = 6
 
     print("Heartbeat timeout generated randomly = ", hb_timeout)
@@ -275,6 +295,9 @@ def normalRecv(skt): # Common Recv
 
         if decoded_msg["request"] == "LEADER_INFO" and decoded_msg["sender_name"] == "Controller":
             send_leader_info(pulse_sending_socket)
+        
+        if decoded_msg["request"] == "ALL_INFO" and decoded_msg["sender_name"] == "Controller":
+            send_all_info(pulse_sending_socket)
         
 
 class Person(db.Model):

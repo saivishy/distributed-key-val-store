@@ -1,0 +1,7 @@
+{
+    "currentTerm": "2",
+    "votedFor": "Node5",
+    "log": "[]",
+    "timeoutInterval": 18,
+    "heartBeatInterval": 4
+}
