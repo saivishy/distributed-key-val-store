@@ -61,7 +61,7 @@ def heartBeatSend(skt, hb_interval = 10):
             if (os.environ["SHUTDOWN_FLAG"])=="1":
                 sys.exit()
             
-            print('Sending HeartBeat...')
+            # print('Sending HeartBeat...')
             msg = makeMessage("APPEND_RPC", "", "")
             active_node_count = num_of_nodes
             for node in range(1,num_of_nodes+1):
@@ -84,7 +84,7 @@ def heartBeatSend(skt, hb_interval = 10):
             time.sleep(hb_interval)
 
 def listener(skt):
-    print(f'Listening for messages... ')
+    # print(f'Listening for messages... ')
     while True:
         try:
             recv_msg, addr = skt.recvfrom(1024)
@@ -108,7 +108,7 @@ def requestVoteRPC(skt, key=0, value=0):
                 print(f"Node{node} not reachable")
                 active_node_count = active_node_count -1
     os.environ["ACTIVE_NODES"] = str(active_node_count)
-    print("I also voted for myself.")
+    # print("I also voted for myself.")
     os.environ["voted"] = "1"
     os.environ["voted_for"] = os.environ.get("NODEID")
 
@@ -133,7 +133,7 @@ def voteMessageSend(skt, incoming_RPC_msg):
 
 def vote_timeout_function(skt, key=0,val=0):
     # do re-election
-    print("REELECTION STARTED")
+    # print("REELECTION STARTED")
     os.environ["voted"] = "0"
 
     if(os.environ.get("STATE")=="candidate"):
@@ -157,7 +157,7 @@ def resetTimerV(skt, key=0,val=0,vote_timeout=7):
 # =========================
 
 def hb_timeout_function(skt, key=0,val=0):
-    print("HB TIMEOUT! Will check if I am a follower ...")
+    # print("HB TIMEOUT! Will check if I am a follower ...")
     if(os.environ.get("STATE")=="follower"):
         print("I am a follower ... Gonna start my candidacy !")
         requestVoteRPC(skt,key,val)
@@ -178,9 +178,9 @@ def resetTimerE(skt, key=0,val=0, hb_timeout=7):
 
 # Controller request function
 def convert_to_follower():
-    print("converting to follower on controller request")
+    # print("converting to follower on controller request")
     os.environ["STATE"] = "follower"
-    print("my current state is : ", os.environ["STATE"])
+    # print("my current state is : ", os.environ["STATE"])
 
 def send_leader_info(skt):
     msg = makeMessage("LEADER_INFO","LEADER",os.environ.get("LEADER_ID")    )
@@ -189,7 +189,7 @@ def send_leader_info(skt):
     try:
         # Encoding and sending the message
         skt.sendto(msg, (target, port))
-        print("leader info sent to controller")
+        # print("leader info sent to controller")
     except:
 	    # socket.gaierror: [Errno -3] would be thrown if target IP container does not exist or exits, write your listener
         print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
@@ -247,6 +247,7 @@ def normalRecv(skt): # Common Recv
             print("HB RECV---")
             os.environ["LEADER_ID"] = decoded_msg["sender_name"]
             resetTimerE(pulse_sending_socket, 0, 0, hb_timeout)
+            os.environ["current_term"] = decoded_msg["term"]
             node_info = getNodeInfo()
             saveObj(node_info, os.environ.get("NODEID"))
         
