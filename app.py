@@ -5,6 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import time
 import os
+from regex import D
 import requests
 import json
 import socket
@@ -21,13 +22,18 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.environ.get('DATABASE_FI
 
 db = SQLAlchemy(app)
 
+def readJSONInfo(filename):
+    f = open(filename, "r")
+    json_obj = json.load(f)
+    return json_obj
+
 def getNodeInfo():
     global hb_timeout
     global hb_send_interval
     sav_dict = {
+        "leader" : os.environ.get('LEADER_ID'),
         "currentTerm" : os.environ.get('current_term'),
         "votedFor": os.environ.get('voted_for'),
-        "log": "[]", 
         "timeoutInterval": hb_timeout,
         "heartBeatInterval": hb_send_interval  
     }
@@ -40,6 +46,10 @@ def saveObj(obj,filename):
     with open(f"{filename}_info.json", "w") as f:
         f.write(obj)
 
+def writeJSONInfo(obj, filename):
+    json_obj = json.dumps(obj, indent=4)
+    saveObj(json_obj, filename)
+    
 ## creating a module to generate message based on request type 
 def makeMessage(request_type:str, key, value):
     print('Making message...')    
@@ -213,6 +223,13 @@ def send_all_info(skt):
         print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
         pass
 
+def store_log():
+    # Add to persistant to log 
+    print("log stored to node")
+
+def retrive_log():
+    # retrive log info 
+    print("log retrived")
 
 def instant_timeout():
 	tE.cancel()
