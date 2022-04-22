@@ -317,6 +317,17 @@ def normalRecv(skt): # Common Recv
         if decoded_msg["request"] == "ALL_INFO" and decoded_msg["sender_name"] == "Controller":
             send_all_info(pulse_sending_socket)
         
+        if decoded_msg["request"] == "STORE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")=="leader":
+            store_log()
+
+        if decoded_msg["request"] == "STORE" and decoded_msg["sender_name"] == "Controller":
+            send_leader_info()
+
+        if decoded_msg["request"] == "RETRIEVE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")=="leader":
+            retrive_log()
+
+        if decoded_msg["request"] == "RETRIEVE" and decoded_msg["sender_name"] == "Controller":
+            send_leader_info()
 
 class Person(db.Model):
     id = db.Column(db.Integer, primary_key= True)
