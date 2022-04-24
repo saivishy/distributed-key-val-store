@@ -23,6 +23,7 @@ services:
   - voted_for=Node1
   - SHUTDOWN_FLAG=0
   - ACTIVE_NODES=0
+  - next_log_index=1
 
  web2:
   build:
@@ -46,6 +47,7 @@ services:
   - voted_for=Node2
   - SHUTDOWN_FLAG=0
   - ACTIVE_NODES=0
+  - next_log_index=1
 
  web3:
   build:
@@ -69,6 +71,7 @@ services:
   - voted_for=Node3
   - SHUTDOWN_FLAG=0
   - ACTIVE_NODES=0
+  - next_log_index=1
 
  web4:
   build:
@@ -92,6 +95,7 @@ services:
   - voted_for=Node4
   - SHUTDOWN_FLAG=0
   - ACTIVE_NODES=0
+  - next_log_index=1
 
  web5:
   build:
@@ -115,6 +119,7 @@ services:
   - voted_for=Node5
   - SHUTDOWN_FLAG=0
   - ACTIVE_NODES=0
+  - next_log_index=1
 
  controller:
   container_name: Controller

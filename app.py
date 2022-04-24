@@ -5,7 +5,6 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import time
 import os
-from regex import D
 import requests
 import json
 import socket
@@ -223,13 +222,31 @@ def send_all_info(skt):
         print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
         pass
 
-def store_log():
+def store_log(key, value):
     # Add to persistant to log 
+    log_file_name = os.environ.get("NODEID") + "_logs.json"
+    log_entry = {
+        "term" : int(os.environ.get("next_log_index")),
+        "key" :value["key"],
+        "value": value["value"]
+    }
+    
+    try:
+        logs = readJSONInfo(log_file_name)
+    except:
+        logs = {}
+
+    logs[key] = log_entry
+    writeJSONInfo(logs, log_file_name)
+    os.environ["next_log_index"] = str(int(os.environ.get("next_log_index"))+1)
     print("log stored to node")
 
-def retrive_log():
+def retrive_log(key):
     # retrive log info 
+    log_file_name = os.environ.get("NODEID") + "_logs.json"
+    logs = readJSONInfo(log_file_name)
     print("log retrived")
+    return logs 
 
 def instant_timeout():
 	tE.cancel()
@@ -318,10 +335,10 @@ def normalRecv(skt): # Common Recv
             send_all_info(pulse_sending_socket)
         
         if decoded_msg["request"] == "STORE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")=="leader":
-            store_log()
+            store_log(int(os.environ.get("next_log_index")), decoded_msg)
 
         if decoded_msg["request"] == "STORE" and decoded_msg["sender_name"] == "Controller":
-            send_leader_info()
+            send_leader_info(pulse_sending_socket)
 
         if decoded_msg["request"] == "RETRIEVE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")=="leader":
             retrive_log()

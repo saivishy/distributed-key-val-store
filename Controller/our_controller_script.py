@@ -47,7 +47,6 @@ if __name__ == "__main__":
         request_target_node = str(input("Select which node to target. Press numbers from 1-5 to select from Node1-Node5 respectively \n"))
     
         msg['sender_name'] = sender
-    
         if request_input == "1":
             msg['request']="CONVERT_FOLLOWER"
         elif request_input == "2":
@@ -60,6 +59,8 @@ if __name__ == "__main__":
             msg['request']="ALL_INFO"   
         elif request_input == "6":
             msg['request']="STORE"   
+            msg['key']="GET addCust"
+            msg['value']="name: sai"
         elif request_input == "7":
             msg['request']="RETRIVE"   
         else:
