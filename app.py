@@ -226,7 +226,7 @@ def store_log(key, value):
     # Add to persistant to log 
     log_file_name = os.environ.get("NODEID") + "_logs.json"
     log_entry = {
-        "term" : int(os.environ.get("next_log_index")),
+        "term" : int(os.environ.get("current_term")),
         "key" :value["key"],
         "value": value["value"]
     }
@@ -235,7 +235,8 @@ def store_log(key, value):
         logs = readJSONInfo(log_file_name)
     except:
         logs = {}
-
+0
+1
     logs[key] = log_entry
     writeJSONInfo(logs, log_file_name)
     os.environ["next_log_index"] = str(int(os.environ.get("next_log_index"))+1)
