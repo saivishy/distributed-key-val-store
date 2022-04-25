@@ -24,6 +24,7 @@ db = SQLAlchemy(app)
 def readJSONInfo(filename):
     f = open(filename, "r")
     json_obj = json.load(f)
+    f.close()
     return json_obj
 
 def getNodeInfo():
@@ -45,9 +46,9 @@ def saveObj(obj,filename):
     with open(f"{filename}_info.json", "w") as f:
         f.write(obj)
 
-def writeJSONInfo(obj, filename):
-    json_obj = json.dumps(obj, indent=4)
-    saveObj(json_obj, filename)
+# def writeJSONInfo(obj, filename):
+#     json_obj = json.dumps(obj, indent=4)
+#     saveObj(json_obj, filename)
     
 ## creating a module to generate message based on request type 
 def makeMessage(request_type:str, key, value):
@@ -222,32 +223,40 @@ def send_all_info(skt):
         print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
         pass
 
-def store_log(key, value):
-    # Add to persistant to log 
+def store_log(log_key, value):
     log_file_name = os.environ.get("NODEID") + "_logs.json"
-    log_entry = {
-        "term" : int(os.environ.get("current_term")),
-        "key" :value["key"],
-        "value": value["value"]
-    }
+    try: 
+        json_obj = json.load(open(log_file_name, "r"))
+        log_entry = {
+            "term" : int(os.environ.get("current_term")),
+            "key" :value["key"],
+            "value": value["value"]
+        }
+        json_obj[log_key] = log_entry
+        with open(log_file_name, 'w') as f:
+            json.dump(json_obj, f, ensure_ascii=False, indent=4)
+        
+        
+    except FileNotFoundError:
+        # json_obj = json.load(open(log_file_name, "r"))
+        json_obj = {}
+        log_entry = {
+            "term" : int(os.environ.get("current_term")),
+            "key" :value["key"],
+            "value": value["value"]
+        }
+        json_obj[log_key] = log_entry
+        with open(log_file_name, 'w') as f:
+            json.dump(json_obj, f, ensure_ascii=False, indent=4)
     
-    try:
-        logs = readJSONInfo(log_file_name)
-    except:
-        logs = {}
-0
-1
-    logs[key] = log_entry
-    writeJSONInfo(logs, log_file_name)
     os.environ["next_log_index"] = str(int(os.environ.get("next_log_index"))+1)
-    print("log stored to node")
 
-def retrive_log(key):
+def retrive_log():
     # retrive log info 
     log_file_name = os.environ.get("NODEID") + "_logs.json"
     logs = readJSONInfo(log_file_name)
     print("log retrived")
-    return logs 
+    return logs
 
 def instant_timeout():
 	tE.cancel()
@@ -336,16 +345,17 @@ def normalRecv(skt): # Common Recv
             send_all_info(pulse_sending_socket)
         
         if decoded_msg["request"] == "STORE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")=="leader":
-            store_log(int(os.environ.get("next_log_index")), decoded_msg)
-
+            store_log(int(os.environ.get("next_log_index")), decoded_msg)         
         if decoded_msg["request"] == "STORE" and decoded_msg["sender_name"] == "Controller":
             send_leader_info(pulse_sending_socket)
 
         if decoded_msg["request"] == "RETRIEVE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")=="leader":
-            retrive_log()
+            logs_retrive = retrive_log()
+            print(logs_retrive)
+
 
         if decoded_msg["request"] == "RETRIEVE" and decoded_msg["sender_name"] == "Controller":
-            send_leader_info()
+            send_leader_info(pulse_sending_socket)
 
 class Person(db.Model):
     id = db.Column(db.Integer, primary_key= True)
@@ -455,6 +465,11 @@ def update(id):
 
 
 if __name__ == "__main__":
+    # Reset JSON logs
+    json_obj = {}
+    with open(log_file_name, 'w') as f:
+            json.dump(json_obj, f, ensure_ascii=False, indent=4)
+
     global hb_send_interval
     hb_send_interval = 4
     node_name = os.environ.get('NODEID')
