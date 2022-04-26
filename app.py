@@ -70,8 +70,16 @@ def heartBeatSend(skt, hb_interval = 10):
         while (os.environ.get("STATE")=="leader"):
             if (os.environ["SHUTDOWN_FLAG"])=="1":
                 sys.exit()
-            
+
             # print('Sending HeartBeat...')
+            # Things to add to heartBeatSend 
+                #  term 
+                # leaderId 
+                # prevLogIndex
+                # prevLogTerm
+                # new entries[]
+                # leadersCommitIndex
+
             msg = makeMessage("APPEND_RPC", "", "")
             active_node_count = num_of_nodes
             for node in range(1,num_of_nodes+1):
@@ -93,6 +101,9 @@ def heartBeatSend(skt, hb_interval = 10):
             
             time.sleep(hb_interval)
 
+def heartBeatReplySend(skt, value):
+    # Send Reply
+    print("heartBeatReplySend")
 def listener(skt):
     # print(f'Listening for messages... ')
     while True:
@@ -287,19 +298,31 @@ def normalRecv(skt): # Common Recv
         decoded_msg = listener(skt)
         print("GOT A message here m8!",decoded_msg)
          
-        if (decoded_msg["request"]== "APPEND_RPC") and (os.environ.get("STATE")=="follower"): 
+        if (decoded_msg["request"] == "APPEND_RPC") and (os.environ.get("STATE")=="follower"): 
             print("HB RECV---")
-            os.environ["LEADER_ID"] = decoded_msg["sender_name"]
+            
+            # Reply False conditions (if so) 
+                # Term< currentTerm
+                # prevLogIndex[prevTerm] ! = prevLogterm
+            #  Else 
+                # update commit index locally. add it to reply message
+                # add logs to log .json heartBeatReply(skt, true)
+            
+            # CHECK AND UPDATE 
+                
+
+            
             resetTimerE(pulse_sending_socket, 0, 0, hb_timeout)
+
+            os.environ["LEADER_ID"] = decoded_msg["sender_name"]
+            
             os.environ["current_term"] = decoded_msg["term"]
+            
             node_info = getNodeInfo()
             saveObj(node_info, os.environ.get("NODEID"))
+            
         
-        if (decoded_msg["request"] == "VOTE_REQUEST"):
-            print("VOTE RPC RECV---")
-            voteMessageSend(pulse_sending_socket, decoded_msg)
-        
-        if (decoded_msg["request"]== "APPEND_RPC") and (os.environ.get("STATE")=="candidate"):
+        if (decoded_msg["request"] == "APPEND_RPC") and (os.environ.get("STATE")=="candidate"):
             print("HB RECV --- CHANGE BACK TO FOLLOWER ---")
             
             resetTimerE(pulse_sending_socket, 0, 0, hb_timeout)
@@ -312,7 +335,15 @@ def normalRecv(skt): # Common Recv
             vote_count = 0
             os.environ["voted"] = "0"
         
-        if (decoded_msg["request"]== "VOTE_ACK") and (os.environ.get("STATE")=="candidate"):
+        # if (decoded_msg["request"] == "APPEND_REPLY") and (os.environ.get("STATE")=="leader"):
+        #     # listen to append reply
+        #     print("append reply")
+
+        if (decoded_msg["request"] == "VOTE_REQUEST"):
+            print("VOTE RPC RECV---")
+            voteMessageSend(pulse_sending_socket, decoded_msg)
+        
+        if (decoded_msg["request"] == "VOTE_ACK") and (os.environ.get("STATE")=="candidate"):
             vote_count+=1
             num_active_nodes = int(os.environ.get("ACTIVE_NODES"))
             print("VOTE RECV --- CURRENT VOTE COUNT:", vote_count + 1 , " ToT VOTES REQUIRED :", ((num_active_nodes-1)//2) + 1)
@@ -323,9 +354,30 @@ def normalRecv(skt): # Common Recv
                 tV.cancel() # cancel reelection
                 os.environ["STATE"] = "leader"
                 os.environ["voted"] = "0"
-
                 os.environ["LEADER_ID"] = os.environ.get("NODEID")
-        
+
+                # Initialize nextIndex[]
+                json_obj = {
+                    "Node1" : int(os.environ.get("commit_index")) + 1,
+                    "Node2" : int(os.environ.get("commit_index")) + 1,
+                    "Node3" : int(os.environ.get("commit_index")) + 1,
+                    "Node4" : int(os.environ.get("commit_index")) + 1,
+                    "Node5" : int(os.environ.get("commit_index")) + 1,
+                }
+                with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
+                    json.dump(json_obj, f, ensure_ascii=False, indent=4)
+                
+                # Initialize matchIndex[]
+                json_obj = {
+                    "Node2" : 0,
+                    "Node1" : 0,
+                    "Node3" : 0,
+                    "Node4" : 0,
+                    "Node5" : 0,
+                }
+                with open(os.environ.get("NODEID") + "_match_index.json", 'w') as f:
+                    json.dump(json_obj, f, ensure_ascii=False, indent=4)
+
         ## controller message processing
         if decoded_msg["request"] == "CONVERT_FOLLOWER" and decoded_msg["sender_name"] == "Controller":
             convert_to_follower()
