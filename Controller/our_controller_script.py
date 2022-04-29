@@ -43,7 +43,7 @@ if __name__ == "__main__":
         sys.exit()
 
     while True:
-        request_input = str(input("Select request to send: \n Press 1 for CONVERT_FOLLOWER \n Press 2 for TIMEOUT \n Press 3 for SHUTDOWN \n Press 4 for LEADER_INFO \n Press 5 for ALL_INFO \n Press 6 for STORE \n Press 7 for RETRIVE \n Press anything else to exit \n"))
+        request_input = str(input("Select request to send: \n Press 1 for CONVERT_FOLLOWER \n Press 2 for TIMEOUT \n Press 3 for SHUTDOWN \n Press 4 for LEADER_INFO \n Press 5 for ALL_INFO \n Press 6 for STORE \n Press 7 for RETRIEVE \n Press anything else to exit \n"))
         request_target_node = str(input("Select which node to target. Press numbers from 1-5 to select from Node1-Node5 respectively \n"))
     
         msg['sender_name'] = sender
@@ -62,7 +62,7 @@ if __name__ == "__main__":
             msg['key']="GET addCust"
             msg['value']="name: sai"
         elif request_input == "7":
-            msg['request']="RETRIVE"   
+            msg['request']="RETRIEVE"   
         else:
             break
         
@@ -71,7 +71,7 @@ if __name__ == "__main__":
             skt.sendto(json.dumps(msg).encode('utf-8'), (f"Node{request_target_node}", port))
             print(f"{msg['request']} sent to Node{request_target_node} \n")
 
-            if request_input =="4" or request_input == "5":
+            if request_input in ["4","5","6","7"]:
                 print(f"Waiting for reply from Node{request_target_node}\n")
                 reply =  listener(skt)
                 print(reply)

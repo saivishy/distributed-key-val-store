@@ -51,15 +51,58 @@ def saveObj(obj,filename):
 #     saveObj(json_obj, filename)
     
 ## creating a module to generate message based on request type 
-def makeMessage(request_type:str, key, value):
-    print('Making message...')    
-    pulse_msg = {
+def makeMessage(request_type:str, key= None, value=None, prevLogIndex=None, prevLogTerm=None, success=None, entry=None):
+    print('Making message...')
+    ## for controller RETRIEVE request since it needs term to be NULL
+    if request_type == "RETRIEVE":
+        pulse_msg = {
         "sender_name" : os.environ.get('NODEID'), 
         "request" : request_type,
-        "term": os.environ.get('current_term'),
+        "term": None,
         "key": key,
         "value": value
-        }
+            }
+    
+    ## for APPEND_RPC request since it needs additional parameters
+
+    ## make note to rename APPEND_RPC to APPEND_ENTRY_RPC to be consistent with the handout instructions
+    elif request_type =="APPEND_RPC":
+        pulse_msg = {
+            "sender_name" : os.environ.get('NODEID'), 
+            "request" : request_type,
+            "term": os.environ.get('current_term'),
+            "key": key,
+            "value": value,
+            "prevLogIndex": prevLogIndex,
+            "prevLogTerm": prevLogTerm,
+            "commitIndex": int(os.environ.get("commit_index")),
+            "success": success,
+            "entry": entry
+            }
+
+    ## for APPEND_REPLY because of same reasons as APPEND_RPC
+    elif request_type == "APPEND_REPLY":
+        pulse_msg = {
+            "sender_name" : os.environ.get('NODEID'), 
+            "request" : request_type,
+            "term": os.environ.get('current_term'),
+            "key": key,
+            "value": value,
+            "prevLogIndex": prevLogIndex,
+            "prevLogTerm": prevLogTerm,
+            "commitIndex": int(os.environ.get("commit_index")),
+            "success": success,
+            "entry": entry
+            }
+
+    else:    
+        pulse_msg = {
+            "sender_name" : os.environ.get('NODEID'), 
+            "request" : request_type,
+            "term": os.environ.get('current_term'),
+            "key": key,
+            "value": value
+            }
     pulse_msg_bytes = json.dumps(pulse_msg).encode()
     return pulse_msg_bytes
 
@@ -80,12 +123,37 @@ def heartBeatSend(skt, hb_interval = 10):
                 # new entries[]
                 # leadersCommitIndex
 
-            msg = makeMessage("APPEND_RPC", "", "")
+            # access leader logs
+            global node_logs                     
+
+            #access nextIndex
+            global nextIndex
+
+            with open(str(os.environ.get("NODEID") + "_commit_index.json"), 'r') as j:
+                nextIndex = json.load(j)
+
+
+            #msg = makeMessage("APPEND_RPC", "", "")
+            
             active_node_count = num_of_nodes
+            
             for node in range(1,num_of_nodes+1):
                 # to differentiate between sender and target nodes
                 if f"Node{node}" != node_name: 
                     try:
+                        ## same message for each node is no longer feasible
+                        ## message based on the recorded nextIndex for each node
+                        ## determines the prevLogIndex, prevLogTerm, and entry to be added from the Leader's log
+                        ## passing all message components explicitly for clarity
+
+                        print(f"making APPEND message for Node{node}")
+                        msg = makeMessage("APPEND_RPC"
+                                        ,key= None
+                                        ,value=None
+                                        ,prevLogIndex=str(nextIndex[f"Node{node}"]-1)
+                                        ,prevLogTerm=node_logs[str(nextIndex[f"Node{node}"]-1)]["term"]
+                                        ,success = None
+                                        ,entry = node_logs[str(nextIndex(f"Node{node}"))])
                         skt.sendto(msg, (f"Node{node}", 5555))
                         print(f"HEARTBEAT TO Node{node} SENT!")
                     except:
@@ -104,6 +172,8 @@ def heartBeatSend(skt, hb_interval = 10):
 def heartBeatReplySend(skt, value):
     # Send Reply
     print("heartBeatReplySend")
+
+
 def listener(skt):
     # print(f'Listening for messages... ')
     while True:
@@ -115,6 +185,7 @@ def listener(skt):
         decoded_msg = json.loads(recv_msg.decode('utf-8'))
         return decoded_msg
     
+
 def requestVoteRPC(skt, key=0, value=0):
     os.environ["STATE"] = "candidate"
     os.environ["current_term"] = str(int(os.environ.get("current_term"))+1)
@@ -199,7 +270,7 @@ def resetTimerE(skt, key=0,val=0, hb_timeout=7):
 
 # Controller request function
 def convert_to_follower():
-    # print("converting to follower on controller request")
+    # print("converting to follower")
     os.environ["STATE"] = "follower"
     # print("my current state is : ", os.environ["STATE"])
 
@@ -262,12 +333,41 @@ def store_log(log_key, value):
     
     os.environ["next_log_index"] = str(int(os.environ.get("next_log_index"))+1)
 
+def store_ack(skt):
+    value = int(os.environ.get("next_log_index"))-1
+    msg = makeMessage("STORE_ACK","STORING_INDEX",value)
+    target = "Controller"
+    port = 5555
+    try:
+        # Encoding and sending the message
+        skt.sendto(msg, (target, port))
+        print("stored index info sent to controller")
+    except:
+	    # socket.gaierror: [Errno -3] would be thrown if target IP container does not exist or exits, write your listener
+        print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
+        pass
+
+
 def retrive_log():
     # retrive log info 
     log_file_name = os.environ.get("NODEID") + "_logs.json"
     logs = readJSONInfo(log_file_name)
     print("log retrived")
     return logs
+
+def send_log(skt, logs_retrived):
+    msg = makeMessage(request_type = "RETRIEVE",key="COMMITED_LOGS",value=logs_retrived)
+    target = "Controller"
+    port = 5555
+    try:
+        # Encoding and sending the message
+        skt.sendto(msg, (target, port))
+        print("stored index info sent to controller")
+    except:
+	    # socket.gaierror: [Errno -3] would be thrown if target IP container does not exist or exits, write your listener
+        print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
+        pass
+
 
 def instant_timeout():
 	tE.cancel()
@@ -278,6 +378,22 @@ def initiate_node_shutdown():
 
     os.environ["SHUTDOWN_FLAG"] = "1"
     sys.exit()
+
+
+def decrease_nextIndex(node_name):
+    global nextIndex
+    nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
+    nextIndex["node_name"] = str(int(nextIndex["node_name"]) - 1) 
+    with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
+        json.dump(json_obj, f, ensure_ascii=False, indent=4)
+
+def update_nextIndex(node_name):
+    global nextIndex
+    nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
+    nextIndex["node_name"] = str(int(nextIndex["node_name"]) + 1) 
+    with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
+        json.dump(json_obj, f, ensure_ascii=False, indent=4)
+
 
 def normalRecv(skt): # Common Recv
     global hb_timeout
@@ -297,7 +413,15 @@ def normalRecv(skt): # Common Recv
         global num_of_nodes 
         decoded_msg = listener(skt)
         print("GOT A message here m8!",decoded_msg)
-         
+
+        ## retrieve logs
+        global node_logs
+        node_logs = retrive_log()
+
+        if os.environ.get("state")== "leader":
+            global nextIndex
+            nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
+ 
         if (decoded_msg["request"] == "APPEND_RPC") and (os.environ.get("STATE")=="follower"): 
             print("HB RECV---")
             
@@ -316,10 +440,48 @@ def normalRecv(skt): # Common Recv
 
             os.environ["LEADER_ID"] = decoded_msg["sender_name"]
             
-            os.environ["current_term"] = decoded_msg["term"]
+            ## I think this needs to be removed
+            ## os.environ["current_term"] = decoded_msg["term"]
             
             node_info = getNodeInfo()
+            
             saveObj(node_info, os.environ.get("NODEID"))
+
+            if int(decoded_msg["term"]) < int(os.environ.get("current_term")):
+                ## have to change the placeholder HBREPLYSEND
+                heartBeatReplySend(pulse_sending_socket, False)
+
+            elif decoded_msg["prevLogIndex"] not in node_logs:
+                heartBeatReplySend(pulse_sending_socket, False)
+
+            elif decoded_msg["prevLogIndex"] in node_logs and decoded_msg["prevLogTerm"] != node_logs[decoded_msg["prevLogIndex"]]["term"]:
+                heartBeatReplySend(pulse_sending_socket, False)
+
+            elif decoded_msg["prevLogIndex"] in node_logs and int(decoded_msg["prevLogTerm"]) == int(node_logs[decoded_msg["prevLogIndex"]]["term"]):
+                ## placeholder for value argument in store_log
+                store_log(decoded_msg["prevLogIndex"], {"key": None, "value": None})
+                heartBeatReplySend(pulse_sending_socket, True)
+        
+        if (decoded_msg["request"] == "APPEND_REPLY") and (os.environ.get("STATE")=="leader"):
+            
+            ## if a APPEND_RPC is requested by a higher term follower, then the leader has gone stale
+            ## hence it updates its state to follower 
+            if decoded_msg["success"] == False:
+                if int(decoded_msg["term"])> int(os.environ.get("currentTerm")):
+                    print("follower replied with higher term ｡ﾟ( ﾟஇ‸இﾟ)ﾟ｡ ; converting to follower")
+                    # converting to follower
+                    convert_to_follower()
+                else:
+                    # log mismatch
+                    # decrease log
+                    print(f'inconsistent log, decrease nextIndex for {decoded_msg["sender_name"]}')
+                    decrease_nextIndex(decoded_msg["sender_name"])
+
+            else:
+                print(f'log accepted ( ͡° ͜ʖ ͡°) ; increasing nextIndex for {decoded_msg["sender_name"]}')
+                update_nextIndex(decoded_msg["sender_name"])
+                    
+
             
         
         if (decoded_msg["request"] == "APPEND_RPC") and (os.environ.get("STATE")=="candidate"):
@@ -358,25 +520,25 @@ def normalRecv(skt): # Common Recv
 
                 # Initialize nextIndex[]
                 json_obj = {
-                    "Node1" : int(os.environ.get("commit_index")) + 1,
-                    "Node2" : int(os.environ.get("commit_index")) + 1,
-                    "Node3" : int(os.environ.get("commit_index")) + 1,
-                    "Node4" : int(os.environ.get("commit_index")) + 1,
-                    "Node5" : int(os.environ.get("commit_index")) + 1,
+                    "Node1" : str(int(os.environ.get("commit_index")) + 1),
+                    "Node2" : str(int(os.environ.get("commit_index")) + 1),
+                    "Node3" : str(int(os.environ.get("commit_index")) + 1),
+                    "Node4" : str(int(os.environ.get("commit_index")) + 1),
+                    "Node5" : str(int(os.environ.get("commit_index")) + 1),
                 }
                 with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
-                    json.dump(json_obj, f, ensure_ascii=False, indent=4)
+                    json.dump(json_obj, f,  indent=4)
                 
                 # Initialize matchIndex[]
                 json_obj = {
-                    "Node2" : 0,
-                    "Node1" : 0,
-                    "Node3" : 0,
-                    "Node4" : 0,
-                    "Node5" : 0,
+                    "Node2" : str(0),
+                    "Node1" : str(0),
+                    "Node3" : str(0),
+                    "Node4" : str(0),
+                    "Node5" : str(0),
                 }
                 with open(os.environ.get("NODEID") + "_match_index.json", 'w') as f:
-                    json.dump(json_obj, f, ensure_ascii=False, indent=4)
+                    json.dump(json_obj, f,  indent=4)
 
         ## controller message processing
         if decoded_msg["request"] == "CONVERT_FOLLOWER" and decoded_msg["sender_name"] == "Controller":
@@ -397,16 +559,18 @@ def normalRecv(skt): # Common Recv
             send_all_info(pulse_sending_socket)
         
         if decoded_msg["request"] == "STORE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")=="leader":
-            store_log(int(os.environ.get("next_log_index")), decoded_msg)         
-        if decoded_msg["request"] == "STORE" and decoded_msg["sender_name"] == "Controller":
+            store_log(int(os.environ.get("next_log_index")), decoded_msg)
+            store_ack(pulse_sending_socket)         
+        
+        if decoded_msg["request"] == "STORE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")!="leader":
             send_leader_info(pulse_sending_socket)
 
         if decoded_msg["request"] == "RETRIEVE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")=="leader":
             logs_retrive = retrive_log()
             print(logs_retrive)
+            send_log(pulse_sending_socket,logs_retrive)
 
-
-        if decoded_msg["request"] == "RETRIEVE" and decoded_msg["sender_name"] == "Controller":
+        if decoded_msg["request"] == "RETRIEVE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")!="leader":
             send_leader_info(pulse_sending_socket)
 
 class Person(db.Model):
@@ -519,6 +683,7 @@ def update(id):
 if __name__ == "__main__":
     # Reset JSON logs
     json_obj = {}
+    log_file_name = os.environ.get("NODEID") + "_logs.json"
     with open(log_file_name, 'w') as f:
             json.dump(json_obj, f, ensure_ascii=False, indent=4)
 
