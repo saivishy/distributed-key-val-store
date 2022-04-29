@@ -169,9 +169,22 @@ def heartBeatSend(skt, hb_interval = 10):
             
             time.sleep(hb_interval)
 
-def heartBeatReplySend(skt, value):
+def heartBeatReplySend(skt=None, success = None,prevLogIndex = None, prevLogTerm= None, entry= None):
     # Send Reply
-    print("heartBeatReplySend")
+    # msg = makeMessage(request_type= "APPEND_REPLY",success=success)
+    msg = makeMessage(request_type="APPEND_REPLY"
+                    ,key= None
+                    ,value=None
+                    ,prevLogIndex=str(prevLogIndex)
+                    ,prevLogTerm=str(prevLogTerm)
+                    ,success = success
+                    ,entry = entry)
+    try:
+        skt.sendto(msg, (os.environ.get("LEADER_ID"), 5555))
+        print(f'HEARTBEAT REPLY SENT TO {os.environ.get("LEADER_ID")} SENT!')
+    except:
+        print(f'ERROR WHILE SENDING HEARTBEAT REPLY TO {os.environ.get("LEADER_ID")} : {traceback.format_exc()}')
+        
 
 
 def listener(skt):
@@ -449,18 +462,18 @@ def normalRecv(skt): # Common Recv
 
             if int(decoded_msg["term"]) < int(os.environ.get("current_term")):
                 ## have to change the placeholder HBREPLYSEND
-                heartBeatReplySend(pulse_sending_socket, False)
+                heartBeatReplySend(skt=pulse_sending_socket, success = False,prevLogIndex = decoded_msg["prevLogIndex"], prevLogTerm= decoded_msg["prevLogTerm"], entry= decoded_msg["entry"])
 
-            elif decoded_msg["prevLogIndex"] not in node_logs:
-                heartBeatReplySend(pulse_sending_socket, False)
+            if decoded_msg["prevLogIndex"] not in node_logs:
+                heartBeatReplySend(skt=pulse_sending_socket, success = False,prevLogIndex = decoded_msg["prevLogIndex"], prevLogTerm= decoded_msg["prevLogTerm"], entry= decoded_msg["entry"])
 
-            elif decoded_msg["prevLogIndex"] in node_logs and decoded_msg["prevLogTerm"] != node_logs[decoded_msg["prevLogIndex"]]["term"]:
-                heartBeatReplySend(pulse_sending_socket, False)
+            if decoded_msg["prevLogIndex"] in node_logs and decoded_msg["prevLogTerm"] != node_logs[decoded_msg["prevLogIndex"]]["term"]:
+                heartBeatReplySend(skt=pulse_sending_socket, success = False,prevLogIndex = decoded_msg["prevLogIndex"], prevLogTerm= decoded_msg["prevLogTerm"], entry= decoded_msg["entry"])
 
-            elif decoded_msg["prevLogIndex"] in node_logs and int(decoded_msg["prevLogTerm"]) == int(node_logs[decoded_msg["prevLogIndex"]]["term"]):
+            if decoded_msg["prevLogIndex"] in node_logs and int(decoded_msg["prevLogTerm"]) == int(node_logs[decoded_msg["prevLogIndex"]]["term"]):
                 ## placeholder for value argument in store_log
                 store_log(decoded_msg["prevLogIndex"], {"key": None, "value": None})
-                heartBeatReplySend(pulse_sending_socket, True)
+                heartBeatReplySend(skt=pulse_sending_socket, success = True,prevLogIndex = decoded_msg["prevLogIndex"], prevLogTerm= decoded_msg["prevLogTerm"], entry= decoded_msg["entry"])
         
         if (decoded_msg["request"] == "APPEND_REPLY") and (os.environ.get("STATE")=="leader"):
             
