@@ -412,14 +412,14 @@ def initiate_node_shutdown():
 def decrease_nextIndex(node_name):
     global nextIndex
     nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
-    nextIndex["node_name"] = str(int(nextIndex["node_name"]) - 1) 
+    nextIndex[node_name] = str(int(nextIndex[node_name]) - 1) 
     with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
         json.dump(json_obj, f, ensure_ascii=False, indent=4)
 
 def update_nextIndex(node_name):
     global nextIndex
     nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
-    nextIndex["node_name"] = str(int(nextIndex["node_name"]) + 1) 
+    nextIndex[node_name] = str(int(nextIndex[node_name]) + 1) 
     with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
         json.dump(json_obj, f, ensure_ascii=False, indent=4)
 
@@ -496,7 +496,7 @@ def normalRecv(skt): # Common Recv
             ## if a APPEND_RPC is requested by a higher term follower, then the leader has gone stale
             ## hence it updates its state to follower 
             if decoded_msg["success"] == False:
-                if int(decoded_msg["term"])> int(os.environ.get("currentTerm")):
+                if int(decoded_msg['term'])> int(os.environ.get("current_term")):
                     print("follower replied with higher term ｡ﾟ( ﾟஇ‸இﾟ)ﾟ｡ ; converting to follower")
                     # converting to follower
                     convert_to_follower()
@@ -741,7 +741,22 @@ if __name__ == "__main__":
         # json_obj = json.load(open(log_file_name, "r"))
         json_obj = {'0':{"term" :'0',"key" :"dummy","value": "dummy"}}
         writeJSONInfo(log_file_name,json_obj)
-        
+
+    
+    global nextIndex
+
+    print("global nextIndex invoked=================================")
+
+    json_obj = {
+                    "Node1" : str(1),
+                    "Node2" : str(1),
+                    "Node3" : str(1),
+                    "Node4" : str(1),
+                    "Node5" : str(1),
+                }
+    
+    nextIndex = json_obj
+
 
     global hb_send_interval
     hb_send_interval = 4
