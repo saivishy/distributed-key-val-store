@@ -27,6 +27,10 @@ def readJSONInfo(filename):
     f.close()
     return json_obj
 
+def writeJSONInfo(filename, json_obj):
+    with open(filename, 'w') as f:
+        json.dump(json_obj, f, ensure_ascii=False, indent=4)
+
 def getNodeInfo():
     global hb_timeout
     global hb_send_interval
@@ -124,14 +128,19 @@ def heartBeatSend(skt, hb_interval = 10):
                 # leadersCommitIndex
 
             # access leader logs
-            global node_logs                     
-
+            global node_logs
+            node_logs = retrive_log()                     
+            
             #access nextIndex
             global nextIndex
+            
+            print(nextIndex)
+            print(type(nextIndex))
 
-            with open(str(os.environ.get("NODEID") + "_commit_index.json"), 'r') as j:
-                nextIndex = json.load(j)
+            # nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
 
+            # print(nextIndex)
+            # print(type(nextIndex))
 
             #msg = makeMessage("APPEND_RPC", "", "")
             
@@ -147,17 +156,24 @@ def heartBeatSend(skt, hb_interval = 10):
                         ## passing all message components explicitly for clarity
 
                         print(f"making APPEND message for Node{node}")
+
+                        if int(nextIndex[f"Node{node}"]) > int(os.environ.get("last_applied_index")):
+                            entry = node_logs[os.environ.get("last_applied_index")]
+                        else:
+                            entry = node_logs[nextIndex[f"Node{node}"]]
+                        
                         msg = makeMessage("APPEND_RPC"
-                                        ,key= None
-                                        ,value=None
-                                        ,prevLogIndex=str(nextIndex[f"Node{node}"]-1)
-                                        ,prevLogTerm=node_logs[str(nextIndex[f"Node{node}"]-1)]["term"]
-                                        ,success = None
-                                        ,entry = node_logs[str(nextIndex(f"Node{node}"))])
+                                        , key=None
+                                        , value=None
+                                        , prevLogIndex=str(int(nextIndex[f"Node{node}"])-1)
+                                        , prevLogTerm=node_logs[str(int(nextIndex[f"Node{node}"])-1)]["term"]
+                                        , success = None
+                                        , entry = entry)
+
                         skt.sendto(msg, (f"Node{node}", 5555))
                         print(f"HEARTBEAT TO Node{node} SENT!")
                     except:
-                        print(f"Node{node} not reachable")
+                        print(f"Node{node} not reachable - {traceback.print_exc()}")
                         active_node_count =  active_node_count -1
 
             os.environ["ACTIVE_NODES"] = str(active_node_count)
@@ -431,9 +447,9 @@ def normalRecv(skt): # Common Recv
         global node_logs
         node_logs = retrive_log()
 
-        if os.environ.get("state")== "leader":
-            global nextIndex
-            nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
+        # if os.environ.get("state")== "leader":
+        #     global nextIndex
+        #     nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
  
         if (decoded_msg["request"] == "APPEND_RPC") and (os.environ.get("STATE")=="follower"): 
             print("HB RECV---")
@@ -527,10 +543,8 @@ def normalRecv(skt): # Common Recv
             if (vote_count>=((num_active_nodes-1)//2)): # n-1 /2  because the node always votes for itself
                 print("NEW LEADER =============")
                 tV.cancel() # cancel reelection
-                os.environ["STATE"] = "leader"
-                os.environ["voted"] = "0"
-                os.environ["LEADER_ID"] = os.environ.get("NODEID")
-
+                print("timer cancelled after being declared leader==================================")
+                
                 # Initialize nextIndex[]
                 json_obj = {
                     "Node1" : str(int(os.environ.get("commit_index")) + 1),
@@ -539,8 +553,26 @@ def normalRecv(skt): # Common Recv
                     "Node4" : str(int(os.environ.get("commit_index")) + 1),
                     "Node5" : str(int(os.environ.get("commit_index")) + 1),
                 }
-                with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
-                    json.dump(json_obj, f,  indent=4)
+                
+                print("json_obj initialized for nextIndex ==========================")
+                writeJSONInfo(f'{os.environ.get("NODEID")}_commit_index.json',json_obj)
+
+                print("json_obj written=============================")
+
+                global nextIndex
+
+                print("global nextIndex invoked=================================")
+
+                nextIndex = json_obj
+                print("nextIndex assigned json_obj==================================")
+
+                os.environ["STATE"] = "leader"
+                os.environ["voted"] = "0"
+                os.environ["LEADER_ID"] = os.environ.get("NODEID")
+                print("env vars updated============================")
+
+                # with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
+                #     json.dump(json_obj, f,  indent=4)
                 
                 # Initialize matchIndex[]
                 json_obj = {
@@ -694,11 +726,22 @@ def update(id):
 
 
 if __name__ == "__main__":
-    # Reset JSON logs
-    json_obj = {}
+    ## initializing log_file_name
     log_file_name = os.environ.get("NODEID") + "_logs.json"
-    with open(log_file_name, 'w') as f:
-            json.dump(json_obj, f, ensure_ascii=False, indent=4)
+
+    try: 
+        ## load log data
+        json_obj = json.load(open(log_file_name, "r"))
+        ## if empty log then give one dummy value
+        if json_obj == {}:
+            json_obj = {'0':{"term" :'0',"key" :"dummy","value": "dummy"}}
+            writeJSONInfo(log_file_name,json_obj)    
+    
+    except FileNotFoundError:
+        # json_obj = json.load(open(log_file_name, "r"))
+        json_obj = {'0':{"term" :'0',"key" :"dummy","value": "dummy"}}
+        writeJSONInfo(log_file_name,json_obj)
+        
 
     global hb_send_interval
     hb_send_interval = 4
