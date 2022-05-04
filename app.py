@@ -162,11 +162,16 @@ def heartBeatSend(skt, hb_interval = 10):
                         else:
                             entry = node_logs[nextIndex[f"Node{node}"]]
                         
+                        if (int(nextIndex[f"Node{node}"]) -1 < 0):
+                            prev_log_index = "0"
+                        else:
+                            prev_log_index = str(int(nextIndex[f"Node{node}"]) -1)
+
                         msg = makeMessage("APPEND_RPC"
                                         , key=None
                                         , value=None
-                                        , prevLogIndex=str(int(nextIndex[f"Node{node}"])-1)
-                                        , prevLogTerm=node_logs[str(int(nextIndex[f"Node{node}"])-1)]["term"]
+                                        , prevLogIndex=prev_log_index
+                                        , prevLogTerm=node_logs[prev_log_index]["term"]
                                         , success = None
                                         , entry = entry)
 
@@ -412,13 +417,19 @@ def initiate_node_shutdown():
 def decrease_nextIndex(node_name):
     global nextIndex
     nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
-    nextIndex[node_name] = str(int(nextIndex[node_name]) - 1) 
-    with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
-        json.dump(json_obj, f, ensure_ascii=False, indent=4)
+    
+    if int(nextIndex[node_name]) == 0:
+        print(node_name, "index is at minimum. decrement failed.")
+
+    else:
+        nextIndex[node_name] = str(int(nextIndex[node_name]) - 1) 
+        with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
+            json.dump(json_obj, f, ensure_ascii=False, indent=4)
 
 def update_nextIndex(node_name):
     global nextIndex
     nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
+
     nextIndex[node_name] = str(int(nextIndex[node_name]) + 1) 
     with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
         json.dump(json_obj, f, ensure_ascii=False, indent=4)
@@ -488,6 +499,7 @@ def normalRecv(skt): # Common Recv
 
             if decoded_msg["prevLogIndex"] in node_logs and int(decoded_msg["prevLogTerm"]) == int(node_logs[decoded_msg["prevLogIndex"]]["term"]):
                 ## placeholder for value argument in store_log
+                # this should be index + 1
                 store_log(decoded_msg["prevLogIndex"], {"key": None, "value": None})
                 heartBeatReplySend(skt=pulse_sending_socket, success = True,prevLogIndex = decoded_msg["prevLogIndex"], prevLogTerm= decoded_msg["prevLogTerm"], entry= decoded_msg["entry"])
         
