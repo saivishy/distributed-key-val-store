@@ -136,13 +136,6 @@ def heartBeatSend(skt, hb_interval = 10):
             
             print(nextIndex)
             print(type(nextIndex))
-
-            # nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
-
-            # print(nextIndex)
-            # print(type(nextIndex))
-
-            #msg = makeMessage("APPEND_RPC", "", "")
             
             active_node_count = num_of_nodes
             
@@ -157,16 +150,28 @@ def heartBeatSend(skt, hb_interval = 10):
 
                         print(f"making APPEND message for Node{node}")
 
-                        if int(nextIndex[f"Node{node}"]) > int(os.environ.get("last_applied_index")):
-                            entry = node_logs[os.environ.get("last_applied_index")]
+                        # nextIndex[Node] has caught up with leader (i.e ==last_applied_)
+                        if int(nextIndex[f"Node{node}"]) > int(os.environ.get("last_applied_index")): 
+                            entry = {
+                                        "term": int(os.environ.get("current_term")),
+                                        "key": "NULL",
+                                        "value": None
+                                    }
+                                
+                        # nextIndex[node] not caught up with leader
                         else:
                             entry = node_logs[nextIndex[f"Node{node}"]]
                         
-                        if (int(nextIndex[f"Node{node}"]) -1 < 0):
+                        #lower bound cap for prevLogIndex
+                        if (int(nextIndex[f"Node{node}"]) -1 <= 0):
                             prev_log_index = "0"
+                            if (os.environ.get("last_applied_index") != "0"):
+                                entry = node_logs["1"]
+                        
+                        # normal  prevLogIndex
                         else:
                             prev_log_index = str(int(nextIndex[f"Node{node}"]) -1)
-
+                            
                         msg = makeMessage("APPEND_RPC"
                                         , key=None
                                         , value=None
@@ -174,7 +179,6 @@ def heartBeatSend(skt, hb_interval = 10):
                                         , prevLogTerm=node_logs[prev_log_index]["term"]
                                         , success = None
                                         , entry = entry)
-
                         skt.sendto(msg, (f"Node{node}", 5555))
                         print(f"HEARTBEAT TO Node{node} SENT!")
                     except:
@@ -340,6 +344,15 @@ def send_all_info(skt):
         pass
 
 def store_log(log_key, value):
+    
+    """
+        store_log
+            Params:
+
+                int log_key,
+                json_obj value
+                
+    """
     log_file_name = os.environ.get("NODEID") + "_logs.json"
     try: 
         json_obj = json.load(open(log_file_name, "r"))
@@ -418,8 +431,8 @@ def decrease_nextIndex(node_name):
     global nextIndex
     nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
     
-    if int(nextIndex[node_name]) == 0:
-        print(node_name, "index is at minimum. decrement failed.")
+    if int(nextIndex[node_name]) == 1:
+        print(node_name, " next index is at minimum=1. decrement failed.")
 
     else:
         nextIndex[node_name] = str(int(nextIndex[node_name]) - 1) 
@@ -430,10 +443,13 @@ def update_nextIndex(node_name):
     global nextIndex
     nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
 
-    nextIndex[node_name] = str(int(nextIndex[node_name]) + 1) 
-    with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
-        json.dump(json_obj, f, ensure_ascii=False, indent=4)
+    # if nextIndex[node] Within bounds of leaders last_applied+1
+    if int(nextIndex[node_name])<= int(os.environ.get("last_applied_index")):
+        nextIndex[node_name] = str(int(nextIndex[node_name]) + 1) 
+        with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
+            json.dump(json_obj, f, ensure_ascii=False, indent=4)
 
+    # else - nextIndex[node] is all caught up
 
 def normalRecv(skt): # Common Recv
     global hb_timeout
@@ -500,12 +516,27 @@ def normalRecv(skt): # Common Recv
             if decoded_msg["prevLogIndex"] in node_logs and int(decoded_msg["prevLogTerm"]) == int(node_logs[decoded_msg["prevLogIndex"]]["term"]):
                 ## placeholder for value argument in store_log
                 # this should be index + 1
-                store_log(decoded_msg["prevLogIndex"], {"key": None, "value": None})
-                heartBeatReplySend(skt=pulse_sending_socket, success = True,prevLogIndex = decoded_msg["prevLogIndex"], prevLogTerm= decoded_msg["prevLogTerm"], entry= decoded_msg["entry"])
-        
+                
+                # NULL Entry heartbeat (leader last log+1)
+                if decoded_msg["key"] == "NULL":
+                    heartBeatReplySend( skt=pulse_sending_socket, 
+                                        success = True, 
+                                        prevLogIndex = decoded_msg["prevLogIndex"], 
+                                        prevLogTerm= decoded_msg["prevLogTerm"], 
+                                        entry= decoded_msg["entry"])    
+
+                # Normal heart beat (leader log to write exists)
+                else:
+                    store_log(int(decoded_msg["prevLogIndex"]) + 1 , {"key": None, "value": None})
+                    heartBeatReplySend(skt=pulse_sending_socket, 
+                                        success = True,
+                                        prevLogIndex = decoded_msg["prevLogIndex"], 
+                                        prevLogTerm= decoded_msg["prevLogTerm"], 
+                                        entry= decoded_msg["entry"])
+                    
         if (decoded_msg["request"] == "APPEND_REPLY") and (os.environ.get("STATE")=="leader"):
             
-            ## if a APPEND_RPC is requested by a higher term follower, then the leader has gone stale
+            ## if a APPEND_REPLY is requested by a higher term follower, then the leader has gone stale
             ## hence it updates its state to follower 
             if decoded_msg["success"] == False:
                 if int(decoded_msg['term'])> int(os.environ.get("current_term")):
@@ -517,11 +548,15 @@ def normalRecv(skt): # Common Recv
                     # decrease log
                     print(f'inconsistent log, decrease nextIndex for {decoded_msg["sender_name"]}')
                     decrease_nextIndex(decoded_msg["sender_name"])
-
+            
+            
             else:
-                print(f'log accepted ( ͡° ͜ʖ ͡°) ; increasing nextIndex for {decoded_msg["sender_name"]}')
-                update_nextIndex(decoded_msg["sender_name"])
-                    
+                if decoded_msg["key"] == "NULL":
+                    print(f'log is consistent ʖ ; for {decoded_msg["sender_name"]}')
+                else:
+                    print(f'log accepted ( ͡° ͜ʖ ͡°) ; increasing nextIndex for {decoded_msg["sender_name"]}')
+                    update_nextIndex(decoded_msg["sender_name"])
+                        
 
             
         
@@ -579,7 +614,7 @@ def normalRecv(skt): # Common Recv
                 print("nextIndex assigned json_obj==================================")
 
                 os.environ["STATE"] = "leader"
-                os.environ["voted"] = "0"
+                # os.environ["voted"] = "0"
                 os.environ["LEADER_ID"] = os.environ.get("NODEID")
                 print("env vars updated============================")
 
