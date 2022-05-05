@@ -55,7 +55,7 @@ def saveObj(obj,filename):
 #     saveObj(json_obj, filename)
     
 ## creating a module to generate message based on request type 
-def makeMessage(request_type:str, key= None, value=None, prevLogIndex=None, prevLogTerm=None, success=None, entry=None):
+def makeMessage(request_type:str, key= None, value=None, prevLogIndex=None, prevLogTerm=None, lastLogIndex= None, lastLogTerm = None, success=None, entry=None):
     print('Making message...')
     ## for controller RETRIEVE request since it needs term to be NULL
     if request_type == "RETRIEVE":
@@ -99,6 +99,16 @@ def makeMessage(request_type:str, key= None, value=None, prevLogIndex=None, prev
             "entry": entry
             }
 
+    elif request_type == "VOTE_REQUEST":
+        pulse_msg = {
+            "sender_name" : os.environ.get('NODEID'), 
+            "request" : request_type,
+            "term": os.environ.get('current_term'),
+            "key": key,
+            "value": value,
+            "lastLogIndex": lastLogIndex,
+            "lastLogTerm": lastLogTerm
+            }
     else:    
         pulse_msg = {
             "sender_name" : os.environ.get('NODEID'), 
@@ -223,11 +233,17 @@ def listener(skt):
         decoded_msg = json.loads(recv_msg.decode('utf-8'))
         return decoded_msg
     
-
 def requestVoteRPC(skt, key=0, value=0):
+    # change state to candidate
     os.environ["STATE"] = "candidate"
+    # update term
     os.environ["current_term"] = str(int(os.environ.get("current_term"))+1)
-    msg = makeMessage("VOTE_REQUEST", "","")
+    # make VOTE_REQUEST msg
+    msg = makeMessage("VOTE_REQUEST",
+                        key="", value="",
+                        lastLogTerm=retrive_log()[os.environ.get("last_applied_index")]["term"], 
+                        lastLogIndex=os.environ.get("last_applied_index"))
+    # 
     active_node_count = num_of_nodes
     for node in range(1, num_of_nodes+1):
         if f"Node{node}" != node_name:
@@ -245,21 +261,54 @@ def requestVoteRPC(skt, key=0, value=0):
 def voteMessageSend(skt, incoming_RPC_msg):
     # if followers term is less than request term and not voted yet grant vote
     print("Voting Params: Curent Term, IncomingRPC Term , Voted(0/1) :",os.environ.get('current_term'), " ", incoming_RPC_msg["term"]," ", os.environ.get("voted"))
-    if (os.environ.get('current_term') < incoming_RPC_msg["term"]): # and (os.environ.get("voted") == "0")
+
+    if int(incoming_RPC_msg["term"]) < int(os.environ.get('current_term')):
+        print(f'denied vote : incoming_RPC_msg["term"] < os.environ.get("current_term")')
+
+    elif (int(incoming_RPC_msg["lastLogTerm"])<int(retrive_log()[os.environ.get("last_applied_index")]["term"])) :
+        print(f'denied vote :incoming_RPC_msg["lastLogTerm"]<retrive_log()[os.environ.get("last_applied_index")]["term"]')
+    
+    elif ((int(incoming_RPC_msg["lastLogTerm"])==int(retrive_log()[os.environ.get("last_applied_index")]["term"]) ) 
+    and (incoming_RPC_msg["lastLogIndex"] < os.environ.get("last_applied_index"))):
+        print(f'denied vote :incoming_RPC_msg["lastLogTerm"]<retrive_log()[os.environ.get("last_applied_index")]["term"]')
+
+    elif (int(os.environ.get("voted")=="0")): 
+        if int(os.environ.get("current_term")) < int(incoming_RPC_msg["term"]):
+            print("vote granted")
+            msg = makeMessage("VOTE_ACK", "", "")
+            skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
+            os.environ["voted"] = "1"
+            os.environ["voted_for"] = incoming_RPC_msg["sender_name"]
         
-        if(os.environ.get('STATE')=="candidate"):
-            tV.cancel()
+        elif (int((incoming_RPC_msg["lastLogTerm"]) == int(retrive_log()[os.environ.get("last_applied_index")]["term"])) 
+        and (int(incoming_RPC_msg["lastLogIndex"]) >= int(os.environ.get("last_applied_index")))):
+            print("vote granted")
+            msg = makeMessage("VOTE_ACK", "", "")
+            skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
+            os.environ["voted"] = "1"
+            os.environ["voted_for"] = incoming_RPC_msg["sender_name"]
+
+
+    # if (os.environ.get('current_term') <= incoming_RPC_msg["term"]) and (os.environ.get("voted") == "0"):
+        
+    #     if(os.environ.get('STATE')=="candidate"):
+    #         tV.cancel()
             
-        # Convert to follower
-        os.environ["STATE"] = "follower"
+    #     # Convert to follower
+    #     os.environ["STATE"] = "follower"
         
         
 
-        msg = makeMessage("VOTE_ACK", "", "")
-        skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
-        os.environ["voted"] = "1"
-        os.environ["voted_for"] = incoming_RPC_msg["sender_name"]
-        print("VOTE SENT")
+    #     msg = makeMessage("VOTE_ACK", "", "")
+    #     skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
+    #     os.environ["voted"] = "1"
+    #     os.environ["voted_for"] = incoming_RPC_msg["sender_name"]
+    #     print("VOTE SENT")
+    # else:
+    #     #  dont vote 
+    #     #  voted already 
+    #     #  or if currTerm< incomingTerm
+    #     print("ok")
 
 def vote_timeout_function(skt, key=0,val=0):
     # do re-election
@@ -491,13 +540,13 @@ def normalRecv(skt): # Common Recv
             # CHECK AND UPDATE 
                 
 
-            
+            # ===================================push umderneth if 
+            # ========================add diff state --------- 
             resetTimerE(pulse_sending_socket, 0, 0, hb_timeout)
 
             os.environ["LEADER_ID"] = decoded_msg["sender_name"]
             
-            ## I think this needs to be removed
-            ## os.environ["current_term"] = decoded_msg["term"]
+            
             
             node_info = getNodeInfo()
             
@@ -614,7 +663,9 @@ def normalRecv(skt): # Common Recv
                 print("nextIndex assigned json_obj==================================")
 
                 os.environ["STATE"] = "leader"
-                # os.environ["voted"] = "0"
+                
+                os.environ["voted"] = "0"
+                
                 os.environ["LEADER_ID"] = os.environ.get("NODEID")
                 print("env vars updated============================")
 
