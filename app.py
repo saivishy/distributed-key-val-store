@@ -50,13 +50,8 @@ def saveObj(obj,filename):
     with open(f"{filename}_info.json", "w") as f:
         f.write(obj)
 
-# def writeJSONInfo(obj, filename):
-#     json_obj = json.dumps(obj, indent=4)
-#     saveObj(json_obj, filename)
-    
-## creating a module to generate message based on request type 
 def makeMessage(request_type:str, key= None, value=None, prevLogIndex=None, prevLogTerm=None, lastLogIndex= None, lastLogTerm = None, success=None, entry=None):
-    print('Making message...')
+    # print('Making message...')
     ## for controller RETRIEVE request since it needs term to be NULL
     if request_type == "RETRIEVE":
         pulse_msg = {
@@ -144,8 +139,8 @@ def heartBeatSend(skt, hb_interval = 10):
             #access nextIndex
             global nextIndex
             
-            print(nextIndex)
-            print(type(nextIndex))
+            # print(nextIndex)
+            # print(type(nextIndex))
             
             active_node_count = num_of_nodes
             
@@ -158,7 +153,7 @@ def heartBeatSend(skt, hb_interval = 10):
                         ## determines the prevLogIndex, prevLogTerm, and entry to be added from the Leader's log
                         ## passing all message components explicitly for clarity
 
-                        print(f"making APPEND message for Node{node}")
+                        # print(f"making APPEND message for Node{node}")
 
                         # nextIndex[Node] has caught up with leader (i.e ==last_applied_)
                         if int(nextIndex[f"Node{node}"]) > int(os.environ.get("last_applied_index")): 
@@ -220,8 +215,6 @@ def heartBeatReplySend(skt=None, success = None,prevLogIndex = None, prevLogTerm
     except:
         print(f'ERROR WHILE SENDING HEARTBEAT REPLY TO {os.environ.get("LEADER_ID")} : {traceback.format_exc()}')
         
-
-
 def listener(skt):
     # print(f'Listening for messages... ')
     while True:
@@ -287,28 +280,6 @@ def voteMessageSend(skt, incoming_RPC_msg):
             skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
             os.environ["voted"] = "1"
             os.environ["voted_for"] = incoming_RPC_msg["sender_name"]
-
-
-    # if (os.environ.get('current_term') <= incoming_RPC_msg["term"]) and (os.environ.get("voted") == "0"):
-        
-    #     if(os.environ.get('STATE')=="candidate"):
-    #         tV.cancel()
-            
-    #     # Convert to follower
-    #     os.environ["STATE"] = "follower"
-        
-        
-
-    #     msg = makeMessage("VOTE_ACK", "", "")
-    #     skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
-    #     os.environ["voted"] = "1"
-    #     os.environ["voted_for"] = incoming_RPC_msg["sender_name"]
-    #     print("VOTE SENT")
-    # else:
-    #     #  dont vote 
-    #     #  voted already 
-    #     #  or if currTerm< incomingTerm
-    #     print("ok")
 
 def vote_timeout_function(skt, key=0,val=0):
     # do re-election
@@ -427,6 +398,7 @@ def store_log(log_key, value):
         with open(log_file_name, 'w') as f:
             json.dump(json_obj, f, ensure_ascii=False, indent=4)
     
+    # json_obg = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
     os.environ["next_log_index"] = str(int(os.environ.get("next_log_index"))+1)
 
 def store_ack(skt):
@@ -437,7 +409,7 @@ def store_ack(skt):
     try:
         # Encoding and sending the message
         skt.sendto(msg, (target, port))
-        print("stored index info sent to controller")
+        # print("stored index info sent to controller")
     except:
 	    # socket.gaierror: [Errno -3] would be thrown if target IP container does not exist or exits, write your listener
         print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
@@ -448,7 +420,7 @@ def retrive_log():
     # retrive log info 
     log_file_name = os.environ.get("NODEID") + "_logs.json"
     logs = readJSONInfo(log_file_name)
-    print("log retrived")
+    # print("log retrived")
     return logs
 
 def send_log(skt, logs_retrived):
@@ -458,7 +430,7 @@ def send_log(skt, logs_retrived):
     try:
         # Encoding and sending the message
         skt.sendto(msg, (target, port))
-        print("stored index info sent to controller")
+        # print("stored index info sent to controller")
     except:
 	    # socket.gaierror: [Errno -3] would be thrown if target IP container does not exist or exits, write your listener
         print(f"ERROR WHILE SENDING REQUEST ACROSS : {traceback.format_exc()}")
@@ -517,7 +489,7 @@ def normalRecv(skt): # Common Recv
     while True:
         global num_of_nodes 
         decoded_msg = listener(skt)
-        print("GOT A message here m8!",decoded_msg)
+        print("GOT A message here :",decoded_msg)
 
         ## retrieve logs
         global node_logs
@@ -549,47 +521,54 @@ def normalRecv(skt): # Common Recv
             
             
             node_info = getNodeInfo()
-            
+
             saveObj(node_info, os.environ.get("NODEID"))
 
+            ## check if follower is of higher term and send False if so
             if int(decoded_msg["term"]) < int(os.environ.get("current_term")):
                 ## have to change the placeholder HBREPLYSEND
                 heartBeatReplySend(skt=pulse_sending_socket, success = False,prevLogIndex = decoded_msg["prevLogIndex"], prevLogTerm= decoded_msg["prevLogTerm"], entry= decoded_msg["entry"])
 
-            if decoded_msg["prevLogIndex"] not in node_logs:
+            ## check if Leader's prevLogIndex is inside the followers's log and send False if not so
+            elif decoded_msg["prevLogIndex"] not in node_logs:
                 heartBeatReplySend(skt=pulse_sending_socket, success = False,prevLogIndex = decoded_msg["prevLogIndex"], prevLogTerm= decoded_msg["prevLogTerm"], entry= decoded_msg["entry"])
 
-            if decoded_msg["prevLogIndex"] in node_logs and decoded_msg["prevLogTerm"] != node_logs[decoded_msg["prevLogIndex"]]["term"]:
+            ## check if Leader's prevLogIndex is inside the follower's log but prevLogTerm is not matching and send False if so
+            elif (decoded_msg["prevLogIndex"] in node_logs 
+            and decoded_msg["prevLogTerm"] != node_logs[decoded_msg["prevLogIndex"]]["term"]):
                 heartBeatReplySend(skt=pulse_sending_socket, success = False,prevLogIndex = decoded_msg["prevLogIndex"], prevLogTerm= decoded_msg["prevLogTerm"], entry= decoded_msg["entry"])
 
-            if decoded_msg["prevLogIndex"] in node_logs and int(decoded_msg["prevLogTerm"]) == int(node_logs[decoded_msg["prevLogIndex"]]["term"]):
+            ## check if Leader's prevLogIndex and prevLogTerm are both matching and send True to Leader
+            elif (decoded_msg["prevLogIndex"] in node_logs 
+            and int(decoded_msg["prevLogTerm"]) == int(node_logs[decoded_msg["prevLogIndex"]]["term"])):
                 ## placeholder for value argument in store_log
                 # this should be index + 1
                 
                 # NULL Entry heartbeat (leader last log+1)
-                if decoded_msg["key"] == "NULL":
+                # if dummy entry which implies an empty heartbeat then send a True without storing any log
+                if decoded_msg["entry"]["key"] == "NULL":
                     heartBeatReplySend( skt=pulse_sending_socket, 
                                         success = True, 
                                         prevLogIndex = decoded_msg["prevLogIndex"], 
                                         prevLogTerm= decoded_msg["prevLogTerm"], 
                                         entry= decoded_msg["entry"])    
 
-                # Normal heart beat (leader log to write exists)
+                # Normal heart beat (leader log to write exists) with entry to be appended to the Followers' log
                 else:
                     store_log(int(decoded_msg["prevLogIndex"]) + 1 , {"key": None, "value": None})
                     heartBeatReplySend(skt=pulse_sending_socket, 
                                         success = True,
                                         prevLogIndex = decoded_msg["prevLogIndex"], 
                                         prevLogTerm= decoded_msg["prevLogTerm"], 
-                                        entry= decoded_msg["entry"])
-                    
+                                        entry= decoded_msg["entry"])                    
+
         if (decoded_msg["request"] == "APPEND_REPLY") and (os.environ.get("STATE")=="leader"):
             
             ## if a APPEND_REPLY is requested by a higher term follower, then the leader has gone stale
             ## hence it updates its state to follower 
             if decoded_msg["success"] == False:
                 if int(decoded_msg['term'])> int(os.environ.get("current_term")):
-                    print("follower replied with higher term ｡ﾟ( ﾟஇ‸இﾟ)ﾟ｡ ; converting to follower")
+                    # print("follower replied with higher term ｡ﾟ( ﾟஇ‸இﾟ)ﾟ｡ ; converting to follower")
                     # converting to follower
                     convert_to_follower()
                 else:
@@ -627,7 +606,7 @@ def normalRecv(skt): # Common Recv
         #     print("append reply")
 
         if (decoded_msg["request"] == "VOTE_REQUEST"):
-            print("VOTE RPC RECV---")
+            # print("VOTE RPC RECV---")
             voteMessageSend(pulse_sending_socket, decoded_msg)
         
         if (decoded_msg["request"] == "VOTE_ACK") and (os.environ.get("STATE")=="candidate"):
@@ -639,7 +618,7 @@ def normalRecv(skt): # Common Recv
             if (vote_count>=((num_active_nodes-1)//2)): # n-1 /2  because the node always votes for itself
                 print("NEW LEADER =============")
                 tV.cancel() # cancel reelection
-                print("timer cancelled after being declared leader==================================")
+                # print("timer cancelled after being declared leader==================================")
                 
                 # Initialize nextIndex[]
                 json_obj = {
@@ -650,24 +629,24 @@ def normalRecv(skt): # Common Recv
                     "Node5" : str(int(os.environ.get("commit_index")) + 1),
                 }
                 
-                print("json_obj initialized for nextIndex ==========================")
+                # print("json_obj initialized for nextIndex ==========================")
                 writeJSONInfo(f'{os.environ.get("NODEID")}_commit_index.json',json_obj)
 
-                print("json_obj written=============================")
+                # print("json_obj written=============================")
 
                 global nextIndex
 
-                print("global nextIndex invoked=================================")
+                # print("global nextIndex invoked=================================")
 
                 nextIndex = json_obj
-                print("nextIndex assigned json_obj==================================")
+                # print("nextIndex assigned json_obj==================================")
 
                 os.environ["STATE"] = "leader"
                 
                 os.environ["voted"] = "0"
                 
                 os.environ["LEADER_ID"] = os.environ.get("NODEID")
-                print("env vars updated============================")
+                # print("env vars updated============================")
 
                 # with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
                 #     json.dump(json_obj, f,  indent=4)
@@ -716,117 +695,12 @@ def normalRecv(skt): # Common Recv
         if decoded_msg["request"] == "RETRIEVE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")!="leader":
             send_leader_info(pulse_sending_socket)
 
-class Person(db.Model):
-    id = db.Column(db.Integer, primary_key= True)
-    name = db.Column(db.String(200), nullable = False)
-    hash = db.Column(db.Integer, nullable = False)
-    date_created = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    def __repr__(self):
-        return '<Record %r' % self.id
-
-db.create_all()
-
-## index route
-@app.route('/', methods=['POST', 'GET'])
-def index():
-    if request.method == 'POST':
-        record_name = request.form['name']
-        record_hash = request.form['hash']
-        lead = os.environ.get('LEADER')
-        if  lead == '1':
-            files= {"name": (None,record_name) , "hash": (None,record_hash)}
-            url1 = 'http://Node2:5000/'
-            log1 = requests.post(url1,  files =files)
-            url2 = 'http://Node3:5000/'
-            log2 = requests.post(url2, files =files)
-        else:
-            print('NOT LEADER-------------------')
-            print(os.environ.get('LEADER'))
-        new_record = Person(name=record_name,hash=record_hash) 
-        try:
-            db.session.add(new_record)            
-            db.session.commit()
-            return redirect('/')
-        except:
-            return 'There was an issue adding the record'
-    else:
-        records = Person.query.order_by(Person.date_created).all()
-        return render_template('index.html', records = records)
-
-@app.route('/delete/<int:id>')
-def delete(id):
-    record_to_delete = Person.query.get_or_404(id)
-
-    lead = os.environ.get('LEADER')
-    if  lead == '1': 
-        for node in range(2,4):
-            url = f"http://Node{node}:5000/delete/{id}"
-            log = requests.get(url)
-            print(f"SENT to delete GET to Node{node}")
-            print(log)
-    else:
-        print('NOT LEADER-------------------')
-        print(os.environ.get('LEADER'))
-
-    try:
-        db.session.delete(record_to_delete)
-        db.session.commit()
-        return redirect('/')
-    except:
-        return 'There was an issue deleting that record'
-
-@app.route('/update/<int:id>', methods= ['GET','POST'])
-def update(id):
-    record = Person.query.get_or_404(id)
-
-    lead = os.environ.get('LEADER')
-    if  lead == '1': 
-        if request.method == 'POST':
-            record.name = request.form['name']
-            record_name = request.form['name']
-            for node in range(2,4):
-                url = f"http://Node{node}:5000//update/{id}"
-                get_log = requests.get(url)
-                print(f"SENT to update GET to Node{node}")
-                print(get_log)
-                
-                files= {"name": (None,record_name)}
-                post_log = requests.post(url,  files =files)
-                print(f"SENT to update POST to Node{node}")
-                print(post_log)
-            
-            try:
-                db.session.commit()
-                return redirect('/')
-            except:
-                return 'There was an issue updating the record'
-        else:
-            return render_template('update.html', record = record )
-            
-            
-    else:
-        print('NOT LEADER-------------------')
-        print(os.environ.get('LEADER'))
-    
-    
-    
-        if request.method == 'POST':
-            record.name = request.form['name']
-            
-            try:
-                db.session.commit()
-                return redirect('/')
-            except:
-                return 'There was an issue updating the record'
-        else:
-            return render_template('update.html', record = record )
-
 
 if __name__ == "__main__":
     ## initializing log_file_name
     log_file_name = os.environ.get("NODEID") + "_logs.json"
 
+    # Init node_id_logs.json
     try: 
         ## load log data
         json_obj = json.load(open(log_file_name, "r"))
@@ -840,11 +714,36 @@ if __name__ == "__main__":
         json_obj = {'0':{"term" :'0',"key" :"dummy","value": "dummy"}}
         writeJSONInfo(log_file_name,json_obj)
 
+    # Init node_id_environ_vars.json  
+    log_file_name = os.environ.get("NODEID") + "_environ_vars.json"  
+    try: 
+        ## load log data
+        json_obj = readJSONInfo(log_file_name)
+        ## if empty log then give one dummy value
+        if json_obj == {}:
+            json_obj = {
+                    "next_log_index":1,
+                    "last_applied_index":0,
+                    "voted":0, 
+                    "voted_for":os.environ.get("NODEID"), 
+                    "leader_id":os.environ.get("NODEID"), 
+                    "state": "follower"
+                    }
+            writeJSONInfo(log_file_name,json_obj)    
     
-    global nextIndex
+    except FileNotFoundError:
+        json_obj = json_obj = {
+                    "next_log_index":1,
+                    "last_applied_index":0,
+                    "voted":0, 
+                    "voted_for":os.environ.get("NODEID"), 
+                    "leader_id":os.environ.get("NODEID"), 
+                    "state": "follower"
+                    }
+        writeJSONInfo(log_file_name,json_obj)
 
-    print("global nextIndex invoked=================================")
-
+    
+    # Init next_index[]
     json_obj = {
                     "Node1" : str(1),
                     "Node2" : str(1),
@@ -853,6 +752,7 @@ if __name__ == "__main__":
                     "Node5" : str(1),
                 }
     
+    global nextIndex
     nextIndex = json_obj
 
 
