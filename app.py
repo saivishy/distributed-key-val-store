@@ -154,9 +154,9 @@ def heartBeatSend(skt, hb_interval = 10):
                         ## passing all message components explicitly for clarity
 
                         # print(f"making APPEND message for Node{node}")
-
+                        environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
                         # nextIndex[Node] has caught up with leader (i.e ==last_applied_)
-                        if int(nextIndex[f"Node{node}"]) > int(os.environ.get("last_applied_index")): 
+                        if int(nextIndex[f"Node{node}"]) > int(environ_vars["last_applied_index"]): 
                             entry = {
                                         "term": int(os.environ.get("current_term")),
                                         "key": "NULL",
@@ -170,7 +170,7 @@ def heartBeatSend(skt, hb_interval = 10):
                         #lower bound cap for prevLogIndex
                         if (int(nextIndex[f"Node{node}"]) -1 <= 0):
                             prev_log_index = "0"
-                            if (os.environ.get("last_applied_index") != "0"):
+                            if (str(environ_vars["last_applied_index"]) != "0"):
                                 entry = node_logs["1"]
                         
                         # normal  prevLogIndex
@@ -232,10 +232,12 @@ def requestVoteRPC(skt, key=0, value=0):
     # update term
     os.environ["current_term"] = str(int(os.environ.get("current_term"))+1)
     # make VOTE_REQUEST msg
+
+    environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
     msg = makeMessage("VOTE_REQUEST",
                         key="", value="",
-                        lastLogTerm=retrive_log()[os.environ.get("last_applied_index")]["term"], 
-                        lastLogIndex=os.environ.get("last_applied_index"))
+                        lastLogTerm=retrive_log()[str(environ_vars["last_applied_index"])]["term"], 
+                        lastLogIndex=str(environ_vars["last_applied_index"]))
     # 
     active_node_count = num_of_nodes
     for node in range(1, num_of_nodes+1):
@@ -252,18 +254,21 @@ def requestVoteRPC(skt, key=0, value=0):
     os.environ["voted_for"] = os.environ.get("NODEID")
 
 def voteMessageSend(skt, incoming_RPC_msg):
+
+    environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+
     # if followers term is less than request term and not voted yet grant vote
     print("Voting Params: Curent Term, IncomingRPC Term , Voted(0/1) :",os.environ.get('current_term'), " ", incoming_RPC_msg["term"]," ", os.environ.get("voted"))
 
     if int(incoming_RPC_msg["term"]) < int(os.environ.get('current_term')):
         print(f'denied vote : incoming_RPC_msg["term"] < os.environ.get("current_term")')
 
-    elif (int(incoming_RPC_msg["lastLogTerm"])<int(retrive_log()[os.environ.get("last_applied_index")]["term"])) :
-        print(f'denied vote :incoming_RPC_msg["lastLogTerm"]<retrive_log()[os.environ.get("last_applied_index")]["term"]')
+    elif (int(incoming_RPC_msg["lastLogTerm"])<int(retrive_log()[str(environ_vars["last_applied_index"])]["term"])) :
+        print(f'denied vote :incoming_RPC_msg["lastLogTerm"]<retrive_log()[str(environ_vars["last_applied_index"])]["term"]')
     
-    elif ((int(incoming_RPC_msg["lastLogTerm"])==int(retrive_log()[os.environ.get("last_applied_index")]["term"]) ) 
-    and (incoming_RPC_msg["lastLogIndex"] < os.environ.get("last_applied_index"))):
-        print(f'denied vote :incoming_RPC_msg["lastLogTerm"]<retrive_log()[os.environ.get("last_applied_index")]["term"]')
+    elif ((int(incoming_RPC_msg["lastLogTerm"])==int(retrive_log()[str(environ_vars["last_applied_index"])]["term"]) ) 
+    and (int(incoming_RPC_msg["lastLogIndex"]) < int(environ_vars["last_applied_index"]))):
+        print(f'denied vote :incoming_RPC_msg["lastLogTerm"]<retrive_log()[environ_vars["last_applied_index"]]["term"]')
 
     elif (int(os.environ.get("voted")=="0")): 
         if int(os.environ.get("current_term")) < int(incoming_RPC_msg["term"]):
@@ -273,8 +278,8 @@ def voteMessageSend(skt, incoming_RPC_msg):
             os.environ["voted"] = "1"
             os.environ["voted_for"] = incoming_RPC_msg["sender_name"]
         
-        elif (int((incoming_RPC_msg["lastLogTerm"]) == int(retrive_log()[os.environ.get("last_applied_index")]["term"])) 
-        and (int(incoming_RPC_msg["lastLogIndex"]) >= int(os.environ.get("last_applied_index")))):
+        elif (int((incoming_RPC_msg["lastLogTerm"]) == int(retrive_log()[str(environ_vars["last_applied_index"])]["term"])) 
+        and (int(incoming_RPC_msg["lastLogIndex"]) >= int(environ_vars["last_applied_index"]))):
             print("vote granted")
             msg = makeMessage("VOTE_ACK", "", "")
             skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
@@ -398,11 +403,15 @@ def store_log(log_key, value):
         with open(log_file_name, 'w') as f:
             json.dump(json_obj, f, ensure_ascii=False, indent=4)
     
-    # json_obg = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
-    os.environ["next_log_index"] = str(int(os.environ.get("next_log_index"))+1)
+    # Update next_log_index
+    environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+    environ_vars["next_log_index"] = environ_vars["next_log_index"] + 1
+    writeJSONInfo(os.environ.get("NODEID") + "_environ_vars.json" ,environ_vars)
+
+    # os.environ["next_log_index"] = str(int(os.environ.get("next_log_index"))+1)
 
 def store_ack(skt):
-    value = int(os.environ.get("next_log_index"))-1
+    value = int(readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")["next_log_index"])
     msg = makeMessage("STORE_ACK","STORING_INDEX",value)
     target = "Controller"
     port = 5555
@@ -464,8 +473,10 @@ def update_nextIndex(node_name):
     global nextIndex
     nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
 
+    environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+
     # if nextIndex[node] Within bounds of leaders last_applied+1
-    if int(nextIndex[node_name])<= int(os.environ.get("last_applied_index")):
+    if int(nextIndex[node_name])<= int(environ_vars["last_applied_index"]):
         nextIndex[node_name] = str(int(nextIndex[node_name]) + 1) 
         with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
             json.dump(json_obj, f, ensure_ascii=False, indent=4)
