@@ -166,7 +166,7 @@ def heartBeatSend(skt, hb_interval = 10):
                                 
                         # nextIndex[node] not caught up with leader
                         else:
-                            entry = node_logs[nextIndex[f"Node{node}"]]
+                            entry = node_logs[str(nextIndex[f"Node{node}"])]
                         
                         #lower bound cap for prevLogIndex
                         if (int(nextIndex[f"Node{node}"]) -1 <= 0):
@@ -374,7 +374,6 @@ def store_log(log_key, value):
     """
         store_log
             Params:
-
                 int log_key,
                 json_obj value
                 
@@ -382,33 +381,46 @@ def store_log(log_key, value):
     log_file_name = os.environ.get("NODEID") + "_logs.json"
     try: 
         json_obj = json.load(open(log_file_name, "r"))
-        log_entry = {
-            "term" : int(os.environ.get("current_term")),
-            "key" :value["key"],
-            "value": value["value"]
-        }
-        json_obj[log_key] = log_entry
+        if value["sender_name"] == "Controller":
+            log_entry = {
+                "term" : int(os.environ.get("current_term")),
+                "key" :value["key"],
+                "value": value["value"]
+            }
+        else:
+            log_entry = {
+                "term" : value["entry"]["term"],
+                "key" :value["entry"]["key"],
+                "value": value["entry"]["value"]
+            }
+        json_obj[str(log_key)] = log_entry
         with open(log_file_name, 'w') as f:
             json.dump(json_obj, f, ensure_ascii=False, indent=4)
-        
-        
+
+
     except FileNotFoundError:
         # json_obj = json.load(open(log_file_name, "r"))
         json_obj = {}
-        log_entry = {
-            "term" : int(os.environ.get("current_term")),
-            "key" :value["key"],
-            "value": value["value"]
-        }
-        json_obj[log_key] = log_entry
+        if value["sender_name"] == "Controller":
+            log_entry = {
+                "term" : int(os.environ.get("current_term")),
+                "key" :value["key"],
+                "value": value["value"]
+            }
+        else:
+            log_entry = {
+                "term" : value["entry"]["term"],
+                "key" :value["entry"]["key"],
+                "value": value["entry"]["value"]
+            }
+        json_obj[str(log_key)] = log_entry
         with open(log_file_name, 'w') as f:
             json.dump(json_obj, f, ensure_ascii=False, indent=4)
-    
+
     # Update next_log_index
     environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
     environ_vars["next_log_index"] = environ_vars["next_log_index"] + 1
-    os.environ["last_applied_index"] = str(int(os.environ["last_applied_index"]) + 1)
-
+    environ_vars["last_applied_index"] = environ_vars["last_applied_index"] + 1
     writeJSONInfo(os.environ.get("NODEID") + "_environ_vars.json" ,environ_vars)
 
     # os.environ["next_log_index"] = str(int(os.environ.get("next_log_index"))+1)
@@ -469,8 +481,30 @@ def decrease_nextIndex(node_name):
 
     else:
         nextIndex[node_name] = (int(nextIndex[node_name]) - 1) 
+
+        # writeJSONInfo(os.environ.get("NODEID") + "_commit_index.json", nextIndex)    
+        # replace below
         with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
+            json.dump(json_obj, f, ensure_ascii=False, indent=4) 
+            # json.dump(nextIndex, f, ensure_ascii=False, indent=4) 
+
+def decrease_matchIndex(node_name):
+    # this value should not go below 0
+    global matchIndex
+    matchIndex = readJSONInfo(os.environ.get("NODEID") + "_match_index.json")
+    
+    if int(matchIndex[node_name]) == 0:
+        print(node_name, " match index is at minimum=0. decrement failed.")
+
+    else:
+        matchIndex[node_name] = (int(matchIndex[node_name]) - 1) 
+        
+        # writeJSONInfo(os.environ.get("NODEID") + "_match_index.json", matchIndex)    
+        # replace below
+        with open(os.environ.get("NODEID") + "_match_index.json", 'w') as f:
             json.dump(json_obj, f, ensure_ascii=False, indent=4)
+            # json.dump(matchIndex, f, ensure_ascii=False, indent=4) 
+
 
 def update_nextIndex(node_name):
     global nextIndex
@@ -480,9 +514,13 @@ def update_nextIndex(node_name):
 
     # if nextIndex[node] Within bounds of leaders last_applied+1
     if int(nextIndex[node_name])<= int(environ_vars["last_applied_index"]):
-        nextIndex[node_name] = str(int(nextIndex[node_name]) + 1) 
+        nextIndex[node_name] = (int(nextIndex[node_name]) + 1) 
+        
+        # writeJSONInfo(os.environ.get("NODEID") + "_commit_index.json", nextIndex)    
+        # replace below
         with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
             json.dump(json_obj, f, ensure_ascii=False, indent=4)
+            # json.dump(nextIndex, f, ensure_ascii=False, indent=4)
 
     # else - nextIndex[node] is all caught up
 
@@ -577,7 +615,7 @@ def normalRecv(skt): # Common Recv
 
                 # Normal heart beat (leader log to write exists) with entry to be appended to the Followers' log
                 else:
-                    store_log(int(decoded_msg["prevLogIndex"]) + 1 , {"key": None, "value": None})
+                    store_log(int(decoded_msg["prevLogIndex"]) + 1 , decoded_msg)
 
                     # Commit Index Update
                     if int(decoded_msg["commitIndex"]) > int(os.environ.get("commit_index")): 
@@ -606,17 +644,17 @@ def normalRecv(skt): # Common Recv
                     # decrease log
                     print(f'inconsistent log, decrease nextIndex for {decoded_msg["sender_name"]}')
                     decrease_nextIndex(decoded_msg["sender_name"])
+                    # decrease_matchIndex
             
             
             else:
-                if decoded_msg["key"] == "NULL":
+                if decoded_msg["entry"]["key"] == "NULL":
                     print(f'log is consistent ʖ ; for {decoded_msg["sender_name"]}')
+                    # do nothing to match Index
                 else:
                     print(f'log accepted ( ͡° ͜ʖ ͡°) ; increasing nextIndex for {decoded_msg["sender_name"]}')
                     update_nextIndex(decoded_msg["sender_name"])
-                        
-
-            
+                    #
         
         if (decoded_msg["request"] == "APPEND_RPC") and (os.environ.get("STATE")=="candidate"):
             print("HB RECV --- CHANGE BACK TO FOLLOWER ---")
@@ -648,17 +686,19 @@ def normalRecv(skt): # Common Recv
             if (vote_count>=((num_active_nodes-1)//2)): # n-1 /2  because the node always votes for itself
                 print("NEW LEADER =============")
                 tV.cancel() # cancel reelection
-                # print("timer cancelled after being declared leader==================================")
-                
+# print("timer cancelled after being declared leader==================================")
+
+                # read environ variables json to get last_applied_index
+                environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
                 # Initialize nextIndex[]
                 json_obj = {
-                    "Node1" : str(int(os.environ.get("commit_index")) + 1),
-                    "Node2" : str(int(os.environ.get("commit_index")) + 1),
-                    "Node3" : str(int(os.environ.get("commit_index")) + 1),
-                    "Node4" : str(int(os.environ.get("commit_index")) + 1),
-                    "Node5" : str(int(os.environ.get("commit_index")) + 1),
+                    "Node1" : (environ_vars["last_applied_index"] + 1),
+                    "Node2" : (environ_vars["last_applied_index"] + 1),
+                    "Node3" : (environ_vars["last_applied_index"] + 1),
+                    "Node4" : (environ_vars["last_applied_index"] + 1),
+                    "Node5" : (environ_vars["last_applied_index"] + 1),
                 }
-                
+
                 # print("json_obj initialized for nextIndex ==========================")
                 writeJSONInfo(f'{os.environ.get("NODEID")}_commit_index.json',json_obj)
 
@@ -681,7 +721,7 @@ def normalRecv(skt): # Common Recv
                 # with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
                 #     json.dump(json_obj, f,  indent=4)
                 
-                # Initialize matchIndex[]
+                # Re - Initialize matchIndex[]
                 json_obj = {
                     "Node2" : 0,
                     "Node1" : 0,
@@ -711,7 +751,8 @@ def normalRecv(skt): # Common Recv
             send_all_info(pulse_sending_socket)
         
         if decoded_msg["request"] == "STORE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")=="leader":
-            store_log(int(os.environ.get("next_log_index")), decoded_msg)
+            environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+            store_log(int(environ_vars["next_log_index"]), decoded_msg)
             store_ack(pulse_sending_socket)         
         
         if decoded_msg["request"] == "STORE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")!="leader":
@@ -736,12 +777,13 @@ if __name__ == "__main__":
         json_obj = json.load(open(log_file_name, "r"))
         ## if empty log then give one dummy value
         if json_obj == {}:
-            json_obj = {'0':{"term" :'0',"key" :"dummy","value": "dummy"}}
-            writeJSONInfo(log_file_name,json_obj)    
-    
+            json_obj = {'0':{"term" :1,"key" :"dummy","value": "dummy"}}
+            writeJSONInfo(log_file_name,json_obj)
+            os.environ.get("next_log_index") == "1"    
+
     except FileNotFoundError:
         # json_obj = json.load(open(log_file_name, "r"))
-        json_obj = {'0':{"term" :'0',"key" :"dummy","value": "dummy"}}
+        json_obj = {'0':{"term" :1,"key" :"dummy","value": "dummy"}}
         writeJSONInfo(log_file_name,json_obj)
 
     # Init node_id_environ_vars.json  
@@ -786,15 +828,20 @@ if __name__ == "__main__":
     nextIndex = json_obj
 
 
-    # # Initialize matchIndex[]
-    # json_obj = {
-    #     "Node2" : 0,
-    #     "Node1" : 0,
-    #     "Node3" : 0,
-    #     "Node4" : 0,
-    #     "Node5" : 0,
-    # }
-    # with open(os.environ.get("NODEID") + "_match_index.json", 'w') as f:
+    # Initialize matchIndex[]
+    json_obj = {
+        "Node2" : 0,
+        "Node1" : 0,
+        "Node3" : 0,
+        "Node4" : 0,
+        "Node5" : 0,
+    }
+
+    global matchIndex
+    nextIndex = json_obj
+    
+    with open(os.environ.get("NODEID") + "_match_index.json", 'w') as f:
+        json.dump(json_obj, f,  indent=4)
 
     global hb_send_interval
     hb_send_interval = 4
