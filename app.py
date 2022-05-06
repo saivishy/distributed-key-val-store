@@ -165,7 +165,7 @@ def heartBeatSend(skt, hb_interval = 10):
                                 
                         # nextIndex[node] not caught up with leader
                         else:
-                            entry = node_logs[nextIndex[f"Node{node}"]]
+                            entry = node_logs[str(nextIndex[f"Node{node}"])]
                         
                         #lower bound cap for prevLogIndex
                         if (int(nextIndex[f"Node{node}"]) -1 <= 0):
@@ -393,7 +393,7 @@ def store_log(log_key, value):
                 "key" :value["entry"]["key"],
                 "value": value["entry"]["value"]
             }
-        json_obj[log_key] = log_entry
+        json_obj[str(log_key)] = log_entry
         with open(log_file_name, 'w') as f:
             json.dump(json_obj, f, ensure_ascii=False, indent=4)
 
@@ -413,7 +413,7 @@ def store_log(log_key, value):
                 "key" :value["entry"]["key"],
                 "value": value["entry"]["value"]
             }
-        json_obj[log_key] = log_entry
+        json_obj[str(log_key)] = log_entry
         with open(log_file_name, 'w') as f:
             json.dump(json_obj, f, ensure_ascii=False, indent=4)
     
@@ -647,13 +647,15 @@ def normalRecv(skt): # Common Recv
                 tV.cancel() # cancel reelection
                 # print("timer cancelled after being declared leader==================================")
                 
+                # read environ variables json to get last_applied_index
+                environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
                 # Initialize nextIndex[]
                 json_obj = {
-                    "Node1" : str(int(os.environ.get("commit_index")) + 1),
-                    "Node2" : str(int(os.environ.get("commit_index")) + 1),
-                    "Node3" : str(int(os.environ.get("commit_index")) + 1),
-                    "Node4" : str(int(os.environ.get("commit_index")) + 1),
-                    "Node5" : str(int(os.environ.get("commit_index")) + 1),
+                    "Node1" : (environ_vars["last_applied_index"] + 1),
+                    "Node2" : (environ_vars["last_applied_index"] + 1),
+                    "Node3" : (environ_vars["last_applied_index"] + 1),
+                    "Node4" : (environ_vars["last_applied_index"] + 1),
+                    "Node5" : (environ_vars["last_applied_index"] + 1),
                 }
                 
                 # print("json_obj initialized for nextIndex ==========================")
