@@ -139,8 +139,8 @@ def heartBeatSend(skt, hb_interval = 10):
             #access nextIndex
             global nextIndex
             
-            # print(nextIndex)
-            # print(type(nextIndex))
+            #access environ_vars
+            global environ_vars
             
             active_node_count = num_of_nodes
             
@@ -154,7 +154,10 @@ def heartBeatSend(skt, hb_interval = 10):
                         ## passing all message components explicitly for clarity
 
                         # print(f"making APPEND message for Node{node}")
-                        environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+                        
+                        # picking it up in the global variable before the for loop
+                        # environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+                        
                         # nextIndex[Node] has caught up with leader (i.e ==last_applied_)
                         if int(nextIndex[f"Node{node}"]) > int(environ_vars["last_applied_index"]): 
                             entry = {
@@ -214,7 +217,8 @@ def heartBeatReplySend(skt=None, success = None,prevLogIndex = None, prevLogTerm
         print(f'HEARTBEAT REPLY SENT TO {os.environ.get("LEADER_ID")} SENT!')
     except:
         print(f'ERROR WHILE SENDING HEARTBEAT REPLY TO {os.environ.get("LEADER_ID")} : {traceback.format_exc()}')
-        
+
+
 def listener(skt):
     # print(f'Listening for messages... ')
     while True:
@@ -225,7 +229,8 @@ def listener(skt):
         
         decoded_msg = json.loads(recv_msg.decode('utf-8'))
         return decoded_msg
-    
+
+
 def requestVoteRPC(skt, key=0, value=0):
     # change state to candidate
     os.environ["STATE"] = "candidate"
@@ -378,9 +383,14 @@ def store_log(log_key, value):
                 json_obj value
                 
     """
+    global node_logs
+    global environ_vars
+
     log_file_name = os.environ.get("NODEID") + "_logs.json"
+    
     try: 
-        json_obj = json.load(open(log_file_name, "r"))
+        #json_obj = json.load(open(log_file_name, "r"))            ########Arnav_last_day_changes########
+        json_obj = node_logs     ########Arnav_last_day_changes########
         if value["sender_name"] == "Controller":
             log_entry = {
                 "term" : int(os.environ.get("current_term")),
@@ -394,6 +404,7 @@ def store_log(log_key, value):
                 "value": value["entry"]["value"]
             }
         json_obj[str(log_key)] = log_entry
+        node_logs = json_obj   ########Arnav_last_day_changes########
         with open(log_file_name, 'w') as f:
             json.dump(json_obj, f, ensure_ascii=False, indent=4)
 
@@ -414,11 +425,12 @@ def store_log(log_key, value):
                 "value": value["entry"]["value"]
             }
         json_obj[str(log_key)] = log_entry
+        node_logs = json_obj     ########Arnav_last_day_changes########
         with open(log_file_name, 'w') as f:
             json.dump(json_obj, f, ensure_ascii=False, indent=4)
     
     # Update next_log_index
-    environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+    # environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")     ########Arnav_last_day_changes########
     environ_vars["next_log_index"] = environ_vars["next_log_index"] + 1
     environ_vars["last_applied_index"] = environ_vars["last_applied_index"] + 1
     writeJSONInfo(os.environ.get("NODEID") + "_environ_vars.json" ,environ_vars)
@@ -474,27 +486,28 @@ def initiate_node_shutdown():
 
 def decrease_nextIndex(node_name):
     global nextIndex
-    nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
+    # nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")       ########Arnav_last_day_changes########
     
     if int(nextIndex[node_name]) == 1:
         print(node_name, " next index is at minimum=1. decrement failed.")
 
     else:
         nextIndex[node_name] = str(int(nextIndex[node_name]) - 1) 
-        with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
-            json.dump(json_obj, f, ensure_ascii=False, indent=4)
+        with open(os.environ.get("NODEID") + "_next_index.json", 'w') as f:         ########Arnav_last_day_changes######## changing name to _next_index.json
+            json.dump(nextIndex, f, ensure_ascii=False, indent=4)                   ########Arnav_last_day_changes########
 
 def update_nextIndex(node_name):
     global nextIndex
-    nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
+    global environ_vars                                                             ########Arnav_last_day_changes########
+    # nextIndex = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")     ########Arnav_last_day_changes########
 
-    environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+    # environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")   ########Arnav_last_day_changes########
 
     # if nextIndex[node] Within bounds of leaders last_applied+1
     if int(nextIndex[node_name])<= int(environ_vars["last_applied_index"]):
         nextIndex[node_name] = str(int(nextIndex[node_name]) + 1) 
-        with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
-            json.dump(json_obj, f, ensure_ascii=False, indent=4)
+        with open(os.environ.get("NODEID") + "_next_index.json", 'w') as f:            ########Arnav_last_day_changes######## changing name to _next_index.json
+            json.dump(nextIndex, f, ensure_ascii=False, indent=4)                   ########Arnav_last_day_changes########
 
     # else - nextIndex[node] is all caught up
 
@@ -519,7 +532,13 @@ def normalRecv(skt): # Common Recv
 
         ## retrieve logs
         global node_logs
-        node_logs = retrive_log()
+
+        ## access environ_vars
+        global environ_vars
+
+        ## access nextIndex
+        global nextIndex
+        # node_logs = retrive_log()     ########Arnav_last_day_changes########                 reading logs directly from the global variable
 
         # if os.environ.get("state")== "leader":
         #     global nextIndex
@@ -542,13 +561,13 @@ def normalRecv(skt): # Common Recv
             # ========================add diff state --------- 
             resetTimerE(pulse_sending_socket, 0, 0, hb_timeout)
 
-            os.environ["LEADER_ID"] = decoded_msg["sender_name"]
+            # os.environ["LEADER_ID"] = decoded_msg["sender_name"]              ########Arnav_last_day_changes########   pushing it to the True section of the if-elif block
             
             
             
-            node_info = getNodeInfo()
+            # node_info = getNodeInfo()                                         ########Arnav_last_day_changes########
 
-            saveObj(node_info, os.environ.get("NODEID"))
+            # saveObj(node_info, os.environ.get("NODEID"))                      ########Arnav_last_day_changes########      save changes only after the entire message has been parsed  ## pushed after if-elif block
 
             ## check if follower is of higher term and send False if so
             if int(decoded_msg["term"]) < int(os.environ.get("current_term")):
@@ -587,7 +606,16 @@ def normalRecv(skt): # Common Recv
                                         success = True,
                                         prevLogIndex = decoded_msg["prevLogIndex"], 
                                         prevLogTerm= decoded_msg["prevLogTerm"], 
-                                        entry= decoded_msg["entry"])                    
+                                        entry= decoded_msg["entry"])
+
+                os.environ["current_term"] = decoded_msg["term"]              ########Arnav_last_day_changes########           ## updating the follower term to its leaders term
+                os.environ["LEADER_ID"] = decoded_msg["sender_name"]          ########Arnav_last_day_changes########
+
+            
+            node_info = getNodeInfo()                                               ########Arnav_last_day_changes########
+
+            saveObj(node_info, os.environ.get("NODEID"))                            ########Arnav_last_day_changes########
+
 
         if (decoded_msg["request"] == "APPEND_REPLY") and (os.environ.get("STATE")=="leader"):
             
@@ -648,7 +676,7 @@ def normalRecv(skt): # Common Recv
                 # print("timer cancelled after being declared leader==================================")
                 
                 # read environ variables json to get last_applied_index
-                environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+                # environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")       ########Arnav_last_day_changes########   # using directly from in-memory
                 # Initialize nextIndex[]
                 json_obj = {
                     "Node1" : (environ_vars["last_applied_index"] + 1),
@@ -659,7 +687,7 @@ def normalRecv(skt): # Common Recv
                 }
                 
                 # print("json_obj initialized for nextIndex ==========================")
-                writeJSONInfo(f'{os.environ.get("NODEID")}_commit_index.json',json_obj)
+                writeJSONInfo(f'{os.environ.get("NODEID")}_next_index.json',json_obj)             ########Arnav_last_day_changes######## changing name to _next_index.json 
 
                 # print("json_obj written=============================")
 
@@ -710,7 +738,7 @@ def normalRecv(skt): # Common Recv
             send_all_info(pulse_sending_socket)
         
         if decoded_msg["request"] == "STORE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")=="leader":
-            environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+            # environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")           ########Arnav_last_day_changes########
             store_log(int(environ_vars["next_log_index"]), decoded_msg)
             store_ack(pulse_sending_socket)         
         
@@ -718,7 +746,8 @@ def normalRecv(skt): # Common Recv
             send_leader_info(pulse_sending_socket)
 
         if decoded_msg["request"] == "RETRIEVE" and decoded_msg["sender_name"] == "Controller" and os.environ.get("STATE")=="leader":
-            logs_retrive = retrive_log()
+            # logs_retrive = retrive_log()      ########Arnav_last_day_changes########
+            logs_retrive = node_logs            ########Arnav_last_day_changes########           # reading logs from in-memory
             print(logs_retrive)
             send_log(pulse_sending_socket,logs_retrive)
 
@@ -745,6 +774,10 @@ if __name__ == "__main__":
         json_obj = {'0':{"term" :1,"key" :"dummy","value": "dummy"}}
         writeJSONInfo(log_file_name,json_obj)
         
+
+    global node_logs
+    node_logs = json_obj
+
     # Init node_id_environ_vars.json  
     log_file_name = os.environ.get("NODEID") + "_environ_vars.json"  
     try: 
@@ -773,14 +806,18 @@ if __name__ == "__main__":
                     }
         writeJSONInfo(log_file_name,json_obj)
 
+    global environ_vars
+    environ_vars = json_obj
+
     
     # Init next_index[]
+    ########Arnav_last_day_changes########                         initialized w.r.t last_applied_index in environ_vars
     json_obj = {
-                    "Node1" : str(1),
-                    "Node2" : str(1),
-                    "Node3" : str(1),
-                    "Node4" : str(1),
-                    "Node5" : str(1),
+                    "Node1" : (environ_vars["last_applied_index"] + 1),
+                    "Node2" : (environ_vars["last_applied_index"] + 1),
+                    "Node3" : (environ_vars["last_applied_index"] + 1),
+                    "Node4" : (environ_vars["last_applied_index"] + 1),
+                    "Node5" : (environ_vars["last_applied_index"] + 1),
                 }
     
     global nextIndex
