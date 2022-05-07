@@ -14,6 +14,7 @@ from threading import *
 from sqlalchemy import false
 import sys
 from random import *
+from collections import Counter
 
 app =  Flask(__name__)
 
@@ -385,6 +386,7 @@ def store_log(log_key, value):
     """
     global node_logs
     global environ_vars
+    global matchIndex
 
     log_file_name = os.environ.get("NODEID") + "_logs.json"
     
@@ -433,6 +435,9 @@ def store_log(log_key, value):
     # environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")     ########Arnav_last_day_changes########
     environ_vars["next_log_index"] = environ_vars["next_log_index"] + 1
     environ_vars["last_applied_index"] = environ_vars["last_applied_index"] + 1
+    if os.environ.get("STATE") == "leader":
+        matchIndex[os.environ.get("NODEID")] = matchIndex[os.environ.get("NODEID")] + 1
+        writeJSONInfo(os.environ.get("NODEID") + "_match_index.json" ,matchIndex)
     writeJSONInfo(os.environ.get("NODEID") + "_environ_vars.json" ,environ_vars)
 
     # os.environ["next_log_index"] = str(int(os.environ.get("next_log_index"))+1)
@@ -496,6 +501,18 @@ def decrease_nextIndex(node_name):
         with open(os.environ.get("NODEID") + "_next_index.json", 'w') as f:         ########Arnav_last_day_changes######## changing name to _next_index.json
             json.dump(nextIndex, f, ensure_ascii=False, indent=4)                   ########Arnav_last_day_changes########
 
+def decrease_matchIndex(node_name):
+    # this value should not go below 0
+    global matchIndex
+    matchIndex = readJSONInfo(os.environ.get("NODEID") + "_match_index.json")
+
+    if int(matchIndex[node_name]) == 0:
+        print(node_name, " match index is at minimum=0. decrement failed.")
+
+    else:
+        matchIndex[node_name] = (int(matchIndex[node_name]) - 1) 
+        writeJSONInfo(os.environ.get("NODEID") + "_match_index.json", matchIndex)    
+
 def update_nextIndex(node_name):
     global nextIndex
     global environ_vars                                                             ########Arnav_last_day_changes########
@@ -511,9 +528,32 @@ def update_nextIndex(node_name):
 
     # else - nextIndex[node] is all caught up
 
+def update_matchIndex(message):
+    global matchIndex
+    global environ_vars                                                         
+    
+    node_name =  message["sender_name"]
+    prevLogIndex = message["prevLogIndex"]
+
+    # should not exceed last_log_index of leader 
+    if int(matchIndex[node_name])<= int(environ_vars["last_applied_index"]):
+        matchIndex[node_name] = int(prevLogIndex) + 1
+        writeJSONInfo(os.environ.get("NODEID") + "_match_index.json", matchIndex)    
+
+        #  Check majority
+        #  Find highest frequency 
+        counter = Counter(matchIndex.values())
+        majority_commit_val = max(counter)
+        
+        if majority_commit_val > int(environ_vars["commit_index"]):
+            environ_vars["commit_index"] =  majority_commit_val
+            os.environ["commit_index"] = str(majority_commit_val)
+            writeJSONInfo(os.environ.get("NODEID") + "_environ_vars.json" ,environ_vars)
+            
+
 def normalRecv(skt): # Common Recv
     global hb_timeout
-    hb_timeout = randint (12,20)
+    hb_timeout = randint (12,24)
     
     # hb_timeout = round(random.uniform(0.30, 0.50), 2)
     # hb_timeout = 6
@@ -592,6 +632,14 @@ def normalRecv(skt): # Common Recv
                 # NULL Entry heartbeat (leader last log+1)
                 # if dummy entry which implies an empty heartbeat then send a True without storing any log
                 if decoded_msg["entry"]["key"] == "NULL":
+                    
+                    # # Commit Index Update
+                    # if int(decoded_msg["commitIndex"]) > int(os.environ.get("commit_index")): 
+                    #       os.environ["commit_index"] = int(
+                    #             min(int(decoded_msg["commitIndex"]), 
+                    #             int(os.environ.get("last_applied_index")) )
+                    #           )
+
                     heartBeatReplySend( skt=pulse_sending_socket, 
                                         success = True, 
                                         prevLogIndex = decoded_msg["prevLogIndex"], 
@@ -602,6 +650,15 @@ def normalRecv(skt): # Common Recv
                 else:
                     print(f"message to be stored is {decoded_msg}")
                     store_log(int(decoded_msg["prevLogIndex"]) + 1 , decoded_msg)
+
+
+                    # # Commit Index Update
+                    # if int(decoded_msg["commitIndex"]) > int(os.environ.get("commit_index")): 
+                    #       os.environ["commit_index"] = int(
+                    #             min(int(decoded_msg["commitIndex"]), 
+                    #             int(os.environ.get("last_applied_index")) )
+                    #           )
+
                     heartBeatReplySend(skt=pulse_sending_socket, 
                                         success = True,
                                         prevLogIndex = decoded_msg["prevLogIndex"], 
@@ -631,17 +688,17 @@ def normalRecv(skt): # Common Recv
                     # decrease log
                     print(f'inconsistent log, decrease nextIndex for {decoded_msg["sender_name"]}')
                     decrease_nextIndex(decoded_msg["sender_name"])
-            
+                    decrease_matchIndex(decoded_msg["sender_name"])
+
             
             else:
                 if decoded_msg["entry"]["key"] == "NULL":
                     print(f'log is consistent ʖ ; for {decoded_msg["sender_name"]}')
                 else:
-                    print(f'log accepted ( ͡° ͜ʖ ͡°) ; increasing nextIndex for {decoded_msg["sender_name"]}')
+                    print(f'log accepted ( ͡° ͜ʖ ͡°) ; increasing nextIndex and matchIndex for {decoded_msg["sender_name"]}')
                     update_nextIndex(decoded_msg["sender_name"])
-                        
+                    update_matchIndex(decoded_msg)
 
-            
         
         if (decoded_msg["request"] == "APPEND_RPC") and (os.environ.get("STATE")=="candidate"):
             print("HB RECV --- CHANGE BACK TO FOLLOWER ---")
@@ -708,14 +765,14 @@ def normalRecv(skt): # Common Recv
                 # with open(os.environ.get("NODEID") + "_commit_index.json", 'w') as f:
                 #     json.dump(json_obj, f,  indent=4)
                 
-                # Initialize matchIndex[]
+               # Re - Initialize matchIndex[]
                 json_obj = {
-                    "Node2" : str(0),
-                    "Node1" : str(0),
-                    "Node3" : str(0),
-                    "Node4" : str(0),
-                    "Node5" : str(0),
-                }
+                    "Node2" : 0,
+                    "Node1" : 0,
+                    "Node3" : 0,
+                    "Node4" : 0,
+                    "Node5" : 0,
+                 }
                 with open(os.environ.get("NODEID") + "_match_index.json", 'w') as f:
                     json.dump(json_obj, f,  indent=4)
 
@@ -786,6 +843,7 @@ if __name__ == "__main__":
         ## if empty log then give one dummy value
         if json_obj == {}:
             json_obj = {
+                    "commit_index":0,
                     "next_log_index":1,
                     "last_applied_index":0,
                     "voted":0, 
@@ -797,6 +855,7 @@ if __name__ == "__main__":
     
     except FileNotFoundError:
         json_obj = json_obj = {
+                    "commit_index":0,
                     "next_log_index":1,
                     "last_applied_index":0,
                     "voted":0, 
@@ -817,12 +876,73 @@ if __name__ == "__main__":
                     "Node2" : (environ_vars["last_applied_index"] + 1),
                     "Node3" : (environ_vars["last_applied_index"] + 1),
                     "Node4" : (environ_vars["last_applied_index"] + 1),
-                    "Node5" : (environ_vars["last_applied_index"] + 1),
+                    "Node5" : (environ_vars["last_applied_index"] + 1)
                 }
     
     global nextIndex
     nextIndex = json_obj
 
+
+    # Init commit_logs.json
+    try: 
+        ## load log data
+        json_obj = readJSONInfo(os.environ.get("NODEID") + "_commit_index.json")
+        if json_obj == {}:
+            json_obj = {
+                    "Node1" : 0,
+                    "Node2" : 0,
+                    "Node3" : 0,
+                    "Node4" : 0,
+                    "Node5" : 0
+                    }
+            writeJSONInfo(os.environ.get("NODEID") + "_commit_index.json",json_obj)
+
+    
+    except FileNotFoundError:
+        # json_obj = json.load(open(log_file_name, "r"))
+        json_obj = {
+                    "Node1" : 0,
+                    "Node2" : 0,
+                    "Node3" : 0,
+                    "Node4" : 0,
+                    "Node5" : 0,
+                }
+        writeJSONInfo(os.environ.get("NODEID") + "_commit_index.json",json_obj)
+
+    global commitIndex
+    commitIndex = json_obj
+
+    # Initialize matchIndex[]
+    try: 
+        ## load log data
+        json_obj = readJSONInfo(os.environ.get("NODEID") + "_match_index.json")
+        if json_obj == {}:
+            environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+
+            json_obj = {
+                "Node2" : environ_vars["commit_index"],
+                "Node1" : environ_vars["commit_index"],
+                "Node3" : environ_vars["commit_index"],
+                "Node4" : environ_vars["commit_index"],
+                "Node5" : environ_vars["commit_index"]
+            }
+            writeJSONInfo(os.environ.get("NODEID") + "_match_index.json",json_obj)
+
+    
+    except FileNotFoundError:
+        environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+
+        json_obj = {
+            "Node2" : environ_vars["commit_index"],
+            "Node1" : environ_vars["commit_index"],
+            "Node3" : environ_vars["commit_index"],
+            "Node4" : environ_vars["commit_index"],
+            "Node5" : environ_vars["commit_index"]
+        }
+        writeJSONInfo(os.environ.get("NODEID") + "_match_index.json",json_obj)
+    
+    global matchIndex
+    matchIndex = json_obj
 
     global hb_send_interval
     hb_send_interval = 4
