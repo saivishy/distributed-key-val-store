@@ -260,8 +260,10 @@ def requestVoteRPC(skt, key=0, value=0):
     os.environ["voted_for"] = os.environ.get("NODEID")
 
 def voteMessageSend(skt, incoming_RPC_msg):
+    global environ_vars
+    global voteLog
 
-    environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+    # environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
 
     # if followers term is less than request term and not voted yet grant vote
     print("Voting Params: Curent Term, IncomingRPC Term , Voted(0/1) :",os.environ.get('current_term'), " ", incoming_RPC_msg["term"]," ", os.environ.get("voted"))
@@ -276,13 +278,18 @@ def voteMessageSend(skt, incoming_RPC_msg):
     and (int(incoming_RPC_msg["lastLogIndex"]) < int(environ_vars["last_applied_index"]))):
         print(f'denied vote :incoming_RPC_msg["lastLogTerm"]<retrive_log()[environ_vars["last_applied_index"]]["term"]')
 
-    elif (int(os.environ.get("voted")=="0")): 
+    # elif (int(os.environ.get("voted")=="0")):
+    # check if the incoming vote request term is already in the voteLog
+    # if present then you have already voted and hence ignore, else you can vote
+    elif (str(incoming_RPC_msg["term"]) not in voteLog):
         if int(os.environ.get("current_term")) < int(incoming_RPC_msg["term"]):
             print("vote granted")
             msg = makeMessage("VOTE_ACK", "", "")
             skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
             os.environ["voted"] = "1"
             os.environ["voted_for"] = incoming_RPC_msg["sender_name"]
+            voteLog[incoming_RPC_msg["term"]] = "voted"
+            writeJSONInfo(os.environ.get("NODEID") + "_vote_log.json",voteLog)
         
         elif (int((incoming_RPC_msg["lastLogTerm"]) == int(retrive_log()[str(environ_vars["last_applied_index"])]["term"])) 
         and (int(incoming_RPC_msg["lastLogIndex"]) >= int(environ_vars["last_applied_index"]))):
@@ -291,6 +298,8 @@ def voteMessageSend(skt, incoming_RPC_msg):
             skt.sendto(msg, (incoming_RPC_msg["sender_name"], 5555))
             os.environ["voted"] = "1"
             os.environ["voted_for"] = incoming_RPC_msg["sender_name"]
+            voteLog[incoming_RPC_msg["term"]] = "voted"
+            writeJSONInfo(os.environ.get("NODEID") + "_vote_log.json",voteLog)
 
 def vote_timeout_function(skt, key=0,val=0):
     # do re-election
@@ -917,7 +926,7 @@ if __name__ == "__main__":
         ## load log data
         json_obj = readJSONInfo(os.environ.get("NODEID") + "_match_index.json")
         if json_obj == {}:
-            environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+            # environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
 
             json_obj = {
                 "Node2" : environ_vars["commit_index"],
@@ -930,7 +939,7 @@ if __name__ == "__main__":
 
     
     except FileNotFoundError:
-        environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+        # environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
 
         json_obj = {
             "Node2" : environ_vars["commit_index"],
@@ -943,6 +952,32 @@ if __name__ == "__main__":
     
     global matchIndex
     matchIndex = json_obj
+
+    # Initialize voteLog[]
+    try: 
+        ## load log data
+        json_obj = readJSONInfo(os.environ.get("NODEID") + "_vote_log.json")
+        if json_obj == {}:
+            # environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+
+            json_obj = {
+                "0" : "Dummy_log"
+            }
+            writeJSONInfo(os.environ.get("NODEID") + "_vote_log.json",json_obj)
+
+    
+    except FileNotFoundError:
+        # environ_vars = readJSONInfo(os.environ.get("NODEID") + "_environ_vars.json")
+
+        json_obj = {
+            "0" : "Dummy_log"
+        }
+        writeJSONInfo(os.environ.get("NODEID") + "_vote_log.json",json_obj)
+
+    global voteLog
+    voteLog = json_obj
+
+
 
     global hb_send_interval
     hb_send_interval = 4
