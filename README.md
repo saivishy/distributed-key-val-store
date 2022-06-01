@@ -1,12 +1,6 @@
-# **FavShare - Flask Application Readme**
+# **FavShare: A Fault-Tolerent Distributed Key-Value Store**
 
-## **Technology used**
-* The app was developed using Python and the Flask micro web framework
-* The DB connected is SQLite and we are using Flask-SQLAlchemy to query the DB
-* The UI is developed using HTML and CSS
-
-## **Operating Systems**
-* Windows 10 and Fedora 34
+This is fault-tolerent distributed key value store to update and share a list of favorites. This repo serves as a functioning implementaion of the [RAFT consensus protocol](https://raft.github.io/) for fault tolerence in a distributed environment. 
 
 ##  **Important note**
 * There are two docker-compose files, each specific to Windows and Linux OS
@@ -22,7 +16,11 @@
 * Windows -  ```docker-compose -f docker-compose.multi.yml up --build```
 * Linux - ```docker-compose -f docker-compose-linux.multi.yml up --build``` 
 
-<!-- 
-## **Application Video**
-* [Box Link](https://buffalo.box.com/s/p5x0sm07q9uy6b3xo7mvijivsdwiovtf)
- -->
+## **Technology used**
+* Docker is used to emulate a distributed environment.
+* The app was developed using Python and the Flask micro web framework
+* The DB connected is SQLite and we are using Flask-SQLAlchemy to query the DB
+* The UI is developed using HTML and CSS
+
+## **Operating Systems**
+* Windows 10 and Fedora 34
